@@ -16,14 +16,18 @@ import {
 import {
   acceptCandidate,
   generateFileCandidates,
-  generateGitCandidates,
+  generateVersionControlCandidates,
   generateTaskCandidates,
   listCandidates,
   rejectCandidate,
   type IndexedSourceChange,
   type MemoryCandidate,
 } from "../memory/candidate-service.js";
-import { captureGitState, type GitSnapshot } from "../git/git-service.js";
+import type { GitSnapshot } from "../git/git-service.js";
+import {
+  captureVersionControlState,
+  type VersionControlSnapshot,
+} from "../vcs/vcs-service.js";
 import { backupProjectDatabase, doctorProject, exportProject } from "../maintenance/maintenance-service.js";
 import {
   checkpointTask,
@@ -181,6 +185,7 @@ export class ProjectContextApp {
     staleMemories: string[];
     generatedCandidates: MemoryCandidate[];
     git: Omit<GitSnapshot, "diff">;
+    vcs: Omit<VersionControlSnapshot, "diff">;
   }> {
     const project = this.projects.get(projectId);
     if (activeIndexes.has(projectId)) {
@@ -193,16 +198,24 @@ export class ProjectContextApp {
           path: string; content_hash: string;
         }>).map((row) => [row.path, row.content_hash]));
         const result = await indexProject(db, project, options);
-        const git = await captureGitState(db, project.rootPath);
-        const gitCandidates = generateGitCandidates(db, git);
-        const gitChangedPaths = new Set(git.changes.map((change) => change.path));
+        const vcs = await captureVersionControlState(db, project.rootPath);
+        const vcsCandidates = generateVersionControlCandidates(db, vcs);
+        const vcsChangedPaths = new Set(vcs.changes.map((change) => change.path));
         const fileCandidates = generateFileCandidates(
           db,
-          indexedSourceChanges(db, sourceHashes).filter((change) => !gitChangedPaths.has(change.path)),
+          indexedSourceChanges(db, sourceHashes).filter((change) => !vcsChangedPaths.has(change.path)),
         );
-        const generatedCandidates = [...gitCandidates, ...fileCandidates];
+        const generatedCandidates = [...vcsCandidates, ...fileCandidates];
         const staleMemories = detectMemoryDrift(db);
-        const { diff: _diff, ...safeGit } = git;
+        const { diff: _diff, ...safeVcs } = vcs;
+        const safeGit: Omit<GitSnapshot, "diff"> = {
+          available: vcs.kind === "git",
+          head: vcs.kind === "git" ? vcs.revision : null,
+          branch: vcs.kind === "git" ? vcs.branch : null,
+          changes: vcs.kind === "git" ? vcs.changes : [],
+          diffHash: vcs.kind === "git" ? vcs.diffHash : null,
+          capturedAt: vcs.capturedAt,
+        };
         return {
           ...result,
           symbols: scalar(db, "SELECT COUNT(*) FROM symbols"),
@@ -210,6 +223,7 @@ export class ProjectContextApp {
           staleMemories,
           generatedCandidates,
           git: safeGit,
+          vcs: safeVcs,
         };
       });
     } finally {
@@ -306,25 +320,29 @@ export class ProjectContextApp {
   }
 
   health(projectId: string): Record<string, unknown> {
-    return this.withDb(projectId, (db) => ({
-      project: this.projects.get(projectId),
-      sources: scalar(db, "SELECT COUNT(*) FROM sources"),
-      chunks: scalar(db, "SELECT COUNT(*) FROM chunks"),
-      symbols: scalar(db, "SELECT COUNT(*) FROM symbols"),
-      relations: scalar(db, "SELECT COUNT(*) FROM relations"),
-      memories: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM memories GROUP BY status"),
-      candidates: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM memory_candidates GROUP BY status"),
-      tasks: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM tasks GROUP BY status"),
-      schemaVersion: db.pragma("user_version", { simple: true }),
-      gitState: Object.fromEntries((db.prepare("SELECT key, value FROM git_state").all() as Array<{
-        key: string; value: string;
-      }>).map((row) => [row.key, row.value])),
-      lastIndexRun: db.prepare("SELECT * FROM index_runs ORDER BY started_at DESC LIMIT 1").get() ?? null,
-    }));
+    return this.withDb(projectId, (db) => {
+      const vcsState = readVersionControlState(db);
+      return {
+        project: this.projects.get(projectId),
+        sources: scalar(db, "SELECT COUNT(*) FROM sources"),
+        chunks: scalar(db, "SELECT COUNT(*) FROM chunks"),
+        symbols: scalar(db, "SELECT COUNT(*) FROM symbols"),
+        relations: scalar(db, "SELECT COUNT(*) FROM relations"),
+        memories: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM memories GROUP BY status"),
+        candidates: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM memory_candidates GROUP BY status"),
+        tasks: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM tasks GROUP BY status"),
+        schemaVersion: db.pragma("user_version", { simple: true }),
+        vcsState,
+        gitState: vcsState,
+        lastIndexRun: db.prepare("SELECT * FROM index_runs ORDER BY started_at DESC LIMIT 1").get() ?? null,
+      };
+    });
   }
 
   portrait(projectId: string): Record<string, unknown> {
     return this.withDb(projectId, (db) => {
+      const vcsState = readVersionControlState(db);
+      const vcsCapturedAt = db.prepare("SELECT MAX(captured_at) FROM git_state").pluck().get() ?? null;
       const sources = db.prepare(`
         SELECT path, kind, size_bytes AS sizeBytes, indexed_at AS indexedAt
         FROM sources
@@ -353,10 +371,10 @@ export class ProjectContextApp {
           candidates: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM memory_candidates GROUP BY status"),
           tasks: rowsToObject(db, "SELECT status, COUNT(*) AS count FROM tasks GROUP BY status"),
         },
-        gitState: Object.fromEntries((db.prepare("SELECT key, value FROM git_state").all() as Array<{
-          key: string; value: string;
-        }>).map((row) => [row.key, row.value])),
-        gitCapturedAt: db.prepare("SELECT MAX(captured_at) FROM git_state").pluck().get() ?? null,
+        vcsState,
+        vcsCapturedAt,
+        gitState: vcsState,
+        gitCapturedAt: vcsCapturedAt,
         fileTypes: [...fileTypes.entries()]
           .map(([extension, totals]) => ({ extension, ...totals }))
           .sort((left, right) => right.count - left.count || right.bytes - left.bytes)
@@ -481,6 +499,11 @@ function scalar(db: SqliteDatabase, sql: string): number {
 function rowsToObject(db: SqliteDatabase, sql: string): Record<string, number> {
   const rows = db.prepare(sql).all() as Array<{ status: string; count: number }>;
   return Object.fromEntries(rows.map((row) => [row.status, row.count]));
+}
+
+function readVersionControlState(db: SqliteDatabase): Record<string, string> {
+  const rows = db.prepare("SELECT key, value FROM git_state").all() as Array<{ key: string; value: string }>;
+  return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
 function indexedSourceChanges(

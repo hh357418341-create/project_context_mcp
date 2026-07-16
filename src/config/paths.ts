@@ -110,12 +110,11 @@ export function validateStoragePath(input: string): string {
     throw new ProjectContextError("INVALID_STORAGE_PATH", "Storage path must be absolute.");
   }
   const target = normalize(resolve(input));
-  const lowered = target.toLowerCase();
-  const forbiddenSegments = ["\\.git\\", "/.git/", "\\node_modules\\", "/node_modules/"];
-  if (forbiddenSegments.some((segment) => lowered.includes(segment))) {
+  const forbiddenNames = new Set([".git", ".hg", ".svn", "node_modules"]);
+  if (target.toLowerCase().split(/[\\/]+/).some((segment) => forbiddenNames.has(segment))) {
     throw new ProjectContextError(
       "UNSAFE_STORAGE_PATH",
-      "Storage cannot be placed inside .git or node_modules.",
+      "Storage cannot be placed inside version-control metadata or node_modules.",
     );
   }
   if (target === normalize(resolve(tmpdir()))) {

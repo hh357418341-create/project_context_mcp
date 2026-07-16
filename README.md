@@ -19,9 +19,9 @@ Project Context MCP 是一个面向编码智能体的本地优先、跨会话项
 - 默认排除 `.env`、凭据、私钥、数据库、二进制文件、生成目录和大文件
 - 使用 Tree-sitter 索引 TypeScript、TSX、JavaScript、JSX、MJS 和 CJS 符号
 - 搜索与任务上下文包含导入、调用、继承和实现关系
-- 记录 Git 状态与差异哈希证据，但不持久化完整 diff
-- 从 Git 变更、已索引知识文档和已完成任务生成待审核记忆候选
-- Git 与非 Git 项目均支持稳定的候选去重和文档候选替代
+- 自动检测 Git、Mercurial（hg）和 Subversion（svn），记录版本、分支、工作区状态与差异哈希证据，但不持久化完整 diff
+- 从 Git、Mercurial、Subversion 变更、已索引知识文档和已完成任务生成待审核记忆候选
+- 各类版本控制与无版本控制项目均支持稳定的候选去重和文档候选替代
 - 文件来源发生变化或消失时，将关联的活跃记忆标记为过期
 - 使用段落指纹，避免大文件中无关内容变化导致记忆失效
 - 支持结构化记忆类型、生命周期状态和决策替代关系
@@ -167,17 +167,118 @@ node dist/cli.js project restore-encrypted D:\ProjectMemoryBackups\my-app.pcmb `
 
 浏览器会话使用随机启动令牌，并将其交换为 `HttpOnly`、`SameSite=Strict` Cookie。API 会校验 `Host`、同源状态变更请求、自定义 UI 请求头、JSON Schema 和 64 KiB 请求体上限。服务返回严格的内容安全策略，并且不会监听 `0.0.0.0`。`project-context ui --no-open` 仅供自动化使用，它会将一次性启动 URL 输出到终端。
 
-## Codex MCP 配置
+## Codex 小白教程：安装后默认加载并初始化项目
 
-先完成构建，然后将以下配置添加到 `~/.codex/config.toml`：
+这里的“默认启动”分为两层：Codex 从全局配置加载 MCP 服务；全局 `AGENTS.md` 指示 Codex 在新会话的第一个用户回合打开当前项目、执行增量索引并获取任务上下文。仅打开 Codex 而不开始对话时，不会在后台扫描磁盘。
+
+### 第 1 步：安装并构建
+
+```powershell
+git clone https://github.com/hh357418341-create/project_context_mcp.git D:\tools\project-context-mcp
+cd D:\tools\project-context-mcp
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+需要 Node.js 22 或更高版本。下面示例中的安装目录和项目根目录请替换为自己的绝对路径。
+
+### 第 2 步：一次性初始化个人存储
+
+Windows 示例：
+
+```powershell
+node dist/cli.js init --storage user --allow-project-root D:\project
+```
+
+macOS/Linux 示例：
+
+```bash
+node dist/cli.js init --storage user --allow-project-root "$HOME/code"
+```
+
+这一步只需执行一次。`--allow-project-root` 是允许注册项目的安全边界；有多个代码目录时可以在同一条命令后继续列出其他绝对路径。MCP 不会静默选择存储目录。
+
+### 第 3 步：添加到 Codex 全局 MCP 配置
+
+推荐使用 Codex CLI，避免手写 TOML：
+
+```powershell
+codex mcp add project-context -- node D:/tools/project-context-mcp/dist/mcp/server.js
+codex mcp get project-context
+```
+
+`codex mcp get project-context` 应显示 `enabled: true`。也可以手动编辑 `~/.codex/config.toml`：
 
 ```toml
 [mcp_servers.project-context]
+type = "stdio"
 command = "node"
-args = ["D:/project/project-context-mcp/dist/mcp/server.js"]
+args = ["D:/tools/project-context-mcp/dist/mcp/server.js"]
 ```
 
-使用项目工具前，需要先通过 CLI 初始化一次存储。存储尚未初始化时，MCP 服务仍然可以启动，`storage_status` 会返回需要执行的配置命令。
+如果 `node` 不在 `PATH` 中，将 `command` 改为 Node 可执行文件的绝对路径。修改配置后，重启 Codex 或新建会话。
+
+### 第 4 步：添加 Codex 全局 `AGENTS.md`
+
+创建或编辑：
+
+- Windows：`%USERPROFILE%\.codex\AGENTS.md`
+- macOS/Linux：`~/.codex/AGENTS.md`
+
+加入下面的启动规则。若文件中已有个人规则，只追加这段，不要覆盖原内容。
+
+```markdown
+<!-- project-context-mcp:start -->
+# Cross-session Project Context (project-context-mcp)
+
+Use project-context-mcp to retain sourced project knowledge across Codex sessions.
+
+## Session Workflow
+1. At the beginning of the first user turn in a repository, call `storage_status`.
+2. Call `project_open` with the repository's absolute root path and reuse the returned project ID.
+3. Call `project_index` after opening the project. The first run creates the project database and performs a full index; later runs are incremental.
+4. Before substantial implementation work, call `project_context` with the current task.
+5. Use `project_search` for indexed text, symbols, memories, and code relationships instead of guessing.
+6. For non-trivial work, call `task_start`, save progress with `task_checkpoint`, and call `task_complete` when finished.
+7. Call `project_index` again after meaningful file changes.
+
+## Memory Rules
+- Review `memory_candidates` after indexing Git changes. Accept or reject candidates explicitly; never accept them automatically.
+- Use `memory_remember` only for durable decisions, constraints, lessons, or facts with a clear source.
+- Never store credentials, private keys, tokens, full chat transcripts, or full Git diffs.
+- Run `project_doctor` when stored context appears incomplete or inconsistent.
+<!-- project-context-mcp:end -->
+```
+
+启动流程必须放在 Codex 的全局 `AGENTS.md`，不能只放在 Project Context 工作台的“全局规则”中。工作台规则只有在 `project_context` 已被调用后才能返回，无法负责引导第一次 MCP 调用。
+
+### 第 5 步：验证第一次自动初始化
+
+进入一个位于允许根目录下、尚未注册的仓库，然后启动 Codex 并发送第一条正常任务消息。按照上面的全局规则，Codex 应依次调用：
+
+```text
+storage_status
+project_open
+project_index
+project_context
+```
+
+验证结果：
+
+- `project_open` 返回一个稳定的 `prj_...` 项目 ID；
+- 项目中出现 `.project-context/project.db`；
+- 第一次 `project_index` 执行完整索引，之后的会话执行增量索引；
+- `project_context` 返回与当前任务有关的记忆、规则、任务检查点和索引证据。
+
+建议将 `.project-context/` 加入项目的 `.gitignore`。项目路径不在初始化时配置的允许根目录下时，`project_open` 会拒绝注册；重新运行 `init` 并显式加入正确根目录即可。
+
+### 自动加载不等于永久后台监听
+
+Codex 会根据全局配置提供 MCP 服务，并根据 `AGENTS.md` 在会话首个任务中调用初始化流程。`project_watch_start` 创建的文件监听器只在当前 MCP/CLI 进程内有效，Codex 重启后不会自动恢复；常规用法依靠每次会话开始和重要文件变更后的增量 `project_index`。
+
+Codex 全局配置和 `AGENTS.md` 的作用域可参考 OpenAI 官方文档：[MCP](https://developers.openai.com/codex/mcp/) 和 [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/)。
 
 ## MCP 工具（34 个）
 

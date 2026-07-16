@@ -2,6 +2,8 @@ import { extname, basename } from "node:path";
 
 export const DEFAULT_IGNORE_PATTERNS = [
   ".git/",
+  ".hg/",
+  ".svn/",
   ".project-context/",
   "node_modules/",
   "dist/",

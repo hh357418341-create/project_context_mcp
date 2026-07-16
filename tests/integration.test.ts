@@ -178,6 +178,7 @@ describe("Project Context core", () => {
       );
       const result = await app.index(project.id);
       expect(result.git.available).toBe(true);
+      expect(result.vcs).toMatchObject({ available: true, kind: "git", revision: expect.any(String) });
       expect(result.generatedCandidates.length).toBeGreaterThan(0);
       const pending = app.candidates(project.id);
       expect(pending).toHaveLength(result.generatedCandidates.length);
@@ -196,6 +197,7 @@ describe("Project Context core", () => {
       const first = await app.index(project.id);
       const fileCandidate = first.generatedCandidates.find((candidate) => candidate.sourceRef === "README.md");
       expect(first.git.available).toBe(false);
+      expect(first.vcs).toMatchObject({ available: false, kind: null });
       expect(fileCandidate).toMatchObject({
         sourceKind: "file",
         status: "pending",

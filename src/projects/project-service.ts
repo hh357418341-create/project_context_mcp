@@ -2,16 +2,14 @@ import { basename, dirname, join, normalize, resolve } from "node:path";
 import { access, copyFile, mkdir, realpath, rename, rm, rmdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { SqliteDatabase } from "../storage/database.js";
 import { openDatabase } from "../storage/database.js";
 import { migrateProject, migrateRegistry, PROJECT_SCHEMA_VERSION } from "../storage/schema.js";
 import { createId, nowIso } from "../shared/ids.js";
 import { ProjectContextError } from "../shared/errors.js";
 import { authorizeExistingPath, authorizeOutputPath } from "../security/path-policy.js";
+import { detectVersionControlRemote } from "../vcs/vcs-service.js";
 
-const execFileAsync = promisify(execFile);
 const PROJECT_STORAGE_LAYOUT = "project-root";
 const PROJECT_DATA_DIRECTORY = ".project-context";
 
@@ -80,7 +78,7 @@ export class ProjectService {
     }
     await authorizeExistingPath(normalized, this.allowedProjectRoots, "PROJECT_ROOT_NOT_AUTHORIZED", "Project root");
 
-    const remoteUrl = await gitRemote(normalized);
+    const remoteUrl = await detectVersionControlRemote(normalized);
     if (remoteUrl) {
       const byRemote = this.registry.prepare("SELECT * FROM projects WHERE remote_url = ?")
         .get(remoteUrl) as ProjectRow | undefined;
@@ -195,7 +193,7 @@ export class ProjectService {
       throw new ProjectContextError("PROJECT_ROOT_ALREADY_REGISTERED", `Project root is already registered: ${newRoot}`);
     }
     const previousDatabase = await this.moveDatabaseToRoot(currentRow, newRoot);
-    const remoteUrl = await gitRemote(newRoot);
+    const remoteUrl = await detectVersionControlRemote(newRoot);
     const timestamp = nowIso();
     this.registry.prepare(`
       UPDATE projects
@@ -468,7 +466,7 @@ export class ProjectService {
       id: createId("prj"),
       name: nameInput?.trim() || basename(rootPath),
       rootPath,
-      remoteUrl: await gitRemote(rootPath),
+      remoteUrl: await detectVersionControlRemote(rootPath),
       createdAt: timestamp,
       updatedAt: timestamp,
       lastOpenedAt: timestamp,
@@ -508,18 +506,6 @@ function mapProject(row: ProjectRow): ProjectRecord {
     lastOpenedAt: row.last_opened_at,
     archivedAt: row.archived_at,
   };
-}
-
-async function gitRemote(root: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync("git", ["-C", root, "remote", "get-url", "origin"], {
-      windowsHide: true,
-      timeout: 5_000,
-    });
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
 }
 
 async function pathExists(path: string): Promise<boolean> {

@@ -47,7 +47,7 @@ export const UI_HTML = String.raw`<!doctype html>
         </nav>
         <div id="portrait-overview" class="portrait-grid">
           <section class="portrait-section portrait-span-2"><header><div><span class="panel-label">CODEBASE</span><h2>代码构成</h2></div></header><div id="portrait-file-types" class="file-types"></div></section>
-          <section class="portrait-section"><header><div><span class="panel-label">VERSION CONTROL</span><h2>Git 状态</h2></div></header><dl id="portrait-git" class="portrait-facts"></dl></section>
+          <section class="portrait-section"><header><div><span class="panel-label">VERSION CONTROL</span><h2>版本控制状态</h2></div></header><dl id="portrait-git" class="portrait-facts"></dl></section>
           <section class="portrait-section"><header><div><span class="panel-label">KNOWLEDGE</span><h2>知识状态</h2></div></header><div id="portrait-knowledge" class="status-groups"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">ACTIVE WORK</span><h2>进行中的任务</h2></div></header><div id="portrait-tasks" class="portrait-list"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">RECENT MEMORY</span><h2>近期记忆</h2></div></header><div id="portrait-memories" class="portrait-list"></div></section>
@@ -842,14 +842,16 @@ export const UI_JS = String.raw`(function () {
   }
 
   function renderGit(portrait) {
-    var git = portrait.gitState || {};
+    var git = portrait.vcsState || portrait.gitState || {};
     var changes = parseJsonArray(git.status);
+    var providerNames = { git: "Git", hg: "Mercurial", svn: "Subversion" };
     var facts = [
+      ["管理工具", providerNames[git.provider] || "未检测到"],
       ["远程仓库", portrait.project.remoteUrl || "未配置"],
       ["当前分支", git.branch || "不可用"],
-      ["提交", git.head ? git.head.slice(0, 12) : "不可用"],
+      ["版本", git.revision ? git.revision.slice(0, 12) : (git.head ? git.head.slice(0, 12) : "不可用")],
       ["工作区变化", git.status === undefined ? "未捕获" : changes.length + " 项"],
-      ["捕获时间", portrait.gitCapturedAt ? formatDate(portrait.gitCapturedAt) : "尚未捕获"]
+      ["捕获时间", portrait.vcsCapturedAt || portrait.gitCapturedAt ? formatDate(portrait.vcsCapturedAt || portrait.gitCapturedAt) : "尚未捕获"]
     ];
     els["portrait-git"].replaceChildren();
     facts.forEach(function (fact) { els["portrait-git"].append(element("dt", "", fact[0]), element("dd", "", fact[1])); });

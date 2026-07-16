@@ -1,5 +1,5 @@
 import type { SqliteDatabase } from "../storage/database.js";
-import type { GitSnapshot } from "../git/git-service.js";
+import type { VersionControlSnapshot } from "../vcs/vcs-service.js";
 import { containsLikelySecret } from "../indexing/file-policy.js";
 import { createId, nowIso, sha256 } from "../shared/ids.js";
 import { ProjectContextError } from "../shared/errors.js";
@@ -37,7 +37,10 @@ export interface IndexedSourceChange {
   content: string;
 }
 
-export function generateGitCandidates(db: SqliteDatabase, snapshot: GitSnapshot): MemoryCandidate[] {
+export function generateVersionControlCandidates(
+  db: SqliteDatabase,
+  snapshot: VersionControlSnapshot,
+): MemoryCandidate[] {
   if (!snapshot.available || !snapshot.diff) return [];
   const additions = addedLinesByFile(snapshot.diff);
   const created: MemoryCandidate[] = [];
@@ -49,9 +52,9 @@ export function generateGitCandidates(db: SqliteDatabase, snapshot: GitSnapshot)
     const candidate = documentCandidate({
       path,
       content,
-      sourceKind: "git",
-      sourceRef: snapshot.head ? `${snapshot.head}:${path}` : path,
-      reason: "Generated from added lines in the current Git diff; review before accepting.",
+      sourceKind: snapshot.kind!,
+      sourceRef: snapshot.revision ? `${snapshot.revision}:${path}` : path,
+      reason: `Generated from added lines in the current ${snapshot.kind} diff; review before accepting.`,
       confidence: 0.55,
       evidence: { path, diffHash: snapshot.diffHash, changeCount: lines.length },
     });
@@ -170,8 +173,10 @@ function addedLinesByFile(diff: string): Map<string, string[]> {
   const files = new Map<string, string[]>();
   let current: string | null = null;
   for (const line of diff.split(/\r?\n/)) {
-    if (line.startsWith("+++ b/")) {
-      current = line.slice(6);
+    if (line.startsWith("+++ ")) {
+      const headerPath = line.slice(4).split("\t", 1)[0]!.trim();
+      current = headerPath === "/dev/null" ? null : headerPath.replace(/^b\//, "");
+      if (!current) continue;
       if (!files.has(current)) files.set(current, []);
     } else if (current && line.startsWith("+") && !line.startsWith("+++")) {
       const value = line.slice(1).trim();
@@ -184,7 +189,7 @@ function addedLinesByFile(diff: string): Map<string, string[]> {
 function documentCandidate(input: {
   path: string;
   content: string;
-  sourceKind: "git" | "file";
+  sourceKind: "git" | "hg" | "svn" | "file";
   sourceRef: string;
   reason: string;
   confidence: number;

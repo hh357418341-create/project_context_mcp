@@ -19,9 +19,9 @@ Project Context MCP is a local-first, cross-session project intelligence and mem
 - Default exclusion of `.env`, credentials, private keys, databases, binaries, generated folders, and large files
 - Tree-sitter symbol indexing for TypeScript, TSX, JavaScript, JSX, MJS, and CJS
 - Import, call, extends, and implements relationships included in search and task context
-- Git status and diff-hash evidence without persisting full diffs
-- Reviewable memory candidates from Git changes, indexed knowledge documents, and completed task checkpoints
-- Stable candidate deduplication and document-candidate superseding across Git and non-Git projects
+- Automatic Git, Mercurial (hg), and Subversion (svn) detection with revision, branch, working-copy status, and diff-hash evidence without persisting full diffs
+- Reviewable memory candidates from Git, Mercurial, and Subversion changes, indexed knowledge documents, and completed task checkpoints
+- Stable candidate deduplication and document-candidate superseding across version-controlled and unversioned projects
 - File-source bindings that mark active memories stale when their evidence changes or disappears
 - Paragraph fingerprints that keep file memories active when unrelated parts of a large file change
 - Structured memory types and lifecycle states, including superseding decisions
@@ -194,17 +194,118 @@ requests validate `Host`, same-origin state-changing requests, a custom UI heade
 body limit. The server sends a restrictive Content Security Policy and never listens on `0.0.0.0`. Use
 `project-context ui --no-open` only for automation; it prints the one-time launch URL to the terminal.
 
-## Codex MCP Configuration
+## Beginner Codex Setup: Load the MCP and Initialize Projects by Default
 
-Build first, then add this to `~/.codex/config.toml`:
+“Default startup” has two layers: Codex loads the MCP server from its global configuration, and a global `AGENTS.md` tells Codex to open and index the current repository during the first user turn of a new session. Merely opening Codex without starting a turn does not scan disks in the background.
+
+### Step 1: Install and build
+
+```powershell
+git clone https://github.com/hh357418341-create/project_context_mcp.git D:\tools\project-context-mcp
+cd D:\tools\project-context-mcp
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+Node.js 22 or newer is required. Replace the installation and project-root paths below with your own absolute paths.
+
+### Step 2: Initialize personal storage once
+
+Windows:
+
+```powershell
+node dist/cli.js init --storage user --allow-project-root D:\project
+```
+
+macOS/Linux:
+
+```bash
+node dist/cli.js init --storage user --allow-project-root "$HOME/code"
+```
+
+Run this step only once. `--allow-project-root` defines the security boundary for projects that may be registered; add more absolute roots to the same command when needed. The MCP never silently chooses a storage directory.
+
+### Step 3: Add the global Codex MCP configuration
+
+Using the Codex CLI is recommended because it avoids hand-editing TOML:
+
+```powershell
+codex mcp add project-context -- node D:/tools/project-context-mcp/dist/mcp/server.js
+codex mcp get project-context
+```
+
+`codex mcp get project-context` should report `enabled: true`. Alternatively, edit `~/.codex/config.toml` manually:
 
 ```toml
 [mcp_servers.project-context]
+type = "stdio"
 command = "node"
-args = ["D:/project/project-context-mcp/dist/mcp/server.js"]
+args = ["D:/tools/project-context-mcp/dist/mcp/server.js"]
 ```
 
-Initialize storage once through the CLI before using project tools. The MCP server itself remains available when storage is missing and `storage_status` returns the required setup command.
+If `node` is not on `PATH`, use the absolute path to the Node executable as `command`. Restart Codex or begin a new session after changing the configuration.
+
+### Step 4: Add a global Codex `AGENTS.md`
+
+Create or edit:
+
+- Windows: `%USERPROFILE%\.codex\AGENTS.md`
+- macOS/Linux: `~/.codex/AGENTS.md`
+
+Add the following startup rules. If the file already contains personal instructions, append this block instead of replacing the file.
+
+```markdown
+<!-- project-context-mcp:start -->
+# Cross-session Project Context (project-context-mcp)
+
+Use project-context-mcp to retain sourced project knowledge across Codex sessions.
+
+## Session Workflow
+1. At the beginning of the first user turn in a repository, call `storage_status`.
+2. Call `project_open` with the repository's absolute root path and reuse the returned project ID.
+3. Call `project_index` after opening the project. The first run creates the project database and performs a full index; later runs are incremental.
+4. Before substantial implementation work, call `project_context` with the current task.
+5. Use `project_search` for indexed text, symbols, memories, and code relationships instead of guessing.
+6. For non-trivial work, call `task_start`, save progress with `task_checkpoint`, and call `task_complete` when finished.
+7. Call `project_index` again after meaningful file changes.
+
+## Memory Rules
+- Review `memory_candidates` after indexing Git changes. Accept or reject candidates explicitly; never accept them automatically.
+- Use `memory_remember` only for durable decisions, constraints, lessons, or facts with a clear source.
+- Never store credentials, private keys, tokens, full chat transcripts, or full Git diffs.
+- Run `project_doctor` when stored context appears incomplete or inconsistent.
+<!-- project-context-mcp:end -->
+```
+
+The bootstrap workflow belongs in Codex's global `AGENTS.md`, not only in the Project Context workbench's global rules. Workbench rules are returned only after `project_context` has already been called, so they cannot bootstrap the first MCP calls.
+
+### Step 5: Verify first-project initialization
+
+Open a repository under an allowed root that has not been registered before, start Codex, and send the first normal task message. The global instructions should make Codex call:
+
+```text
+storage_status
+project_open
+project_index
+project_context
+```
+
+Expected results:
+
+- `project_open` returns a stable `prj_...` project ID;
+- `.project-context/project.db` appears in the repository;
+- the first `project_index` performs a full index and later sessions perform incremental indexes;
+- `project_context` returns memories, rules, task checkpoints, and indexed evidence relevant to the current task.
+
+Add `.project-context/` to the repository's `.gitignore`. If the repository is outside the roots allowed during storage initialization, `project_open` refuses to register it; rerun `init` and explicitly add the correct root.
+
+### Automatic loading is not a persistent background watcher
+
+Codex makes the MCP server available from global configuration and follows `AGENTS.md` during the session's first task. A watcher created by `project_watch_start` exists only for the current MCP/CLI process and is not restored after Codex restarts. The normal workflow relies on incremental `project_index` calls at session start and after meaningful file changes.
+
+For the scope of Codex global configuration and `AGENTS.md`, see the official OpenAI documentation for [MCP](https://developers.openai.com/codex/mcp/) and [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/).
 
 ## MCP Tools (34)
 

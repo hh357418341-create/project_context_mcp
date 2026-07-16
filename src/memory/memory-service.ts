@@ -194,7 +194,7 @@ function resolveSourceBinding(
   sourceExcerpt: string | null;
   sourceExcerptHash: string | null;
 } {
-  if (sourceKind === "git") {
+  if (["git", "hg", "svn"].includes(sourceKind)) {
     return {
       sourceId: null, sourceHash: null, startLine: null, endLine: null,
       gitCommit: sourceRef?.split(":", 1)[0] || null, sourceExcerpt: null, sourceExcerptHash: null,
