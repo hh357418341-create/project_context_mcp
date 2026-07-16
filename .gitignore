@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+output/
+*.log
+.env
+.env.*
+!.env.example
+.project-context/
+*.db
+*.db-shm
+*.db-wal
