@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "implementationVersion": "0.4.0",
+  "generatedAt": "2026-07-15T11:51:47.999Z",
+  "environment": { "node": "v22.22.0", "platform": "win32", "arch": "x64" },
+  "quality": {
+    "search": {
+      "cases": 5,
+      "recallAt1": 0.8,
+      "recallAt5": 1,
+      "mrr": 0.9,
+      "results": [
+        { "id": "document-en", "query": "refresh token rotation", "rank": 2 },
+        { "id": "document-cjk", "query": "刷新令牌重用检测", "rank": 1 },
+        { "id": "function-symbol", "query": "refreshToken", "rank": 1 },
+        { "id": "interface-symbol", "query": "SessionStore", "rank": 1 },
+        { "id": "active-memory", "query": "audit records local", "rank": 1 }
+      ]
+    },
+    "context": { "requiredRecall": 1, "selectedMemoryPrecision": 1, "budgetRespected": true },
+    "candidates": { "expected": 2, "generated": 2, "precision": 1, "recall": 1, "typeAccuracy": 1 }
+  },
+  "performance": {
+    "files": 47,
+    "initialIndexMs": 183.473,
+    "incrementalIndexMs": 109.744,
+    "queryLatencyMs": { "p50": 4.936, "p95": 5.913 },
+    "contextLatencyMs": { "p50": 5.367, "p95": 6.281 }
+  },
+  "thresholds": {
+    "searchRecallAt5": 1,
+    "searchMrr": 0.75,
+    "contextRequiredRecall": 1,
+    "contextMemoryPrecision": 1,
+    "candidatePrecision": 1,
+    "candidateRecall": 1,
+    "candidateTypeAccuracy": 1
+  },
+  "passed": true
+}

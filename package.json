@@ -1,0 +1,45 @@
+{
+  "name": "project-context-mcp",
+  "version": "0.6.1",
+  "description": "Local-first, cross-session project intelligence and memory MCP server",
+  "type": "module",
+  "bin": {
+    "project-context": "dist/cli.js",
+    "project-context-mcp": "dist/mcp/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "tsx src/evaluation/cli.ts",
+    "benchmark": "tsx src/evaluation/cli.ts --benchmark --iterations=100",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/mcp/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^12.0.0",
+    "commander": "^14.0.0",
+    "cytoscape": "^3.34.0",
+    "ignore": "^7.0.0",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "^0.23.1",
+    "tree-sitter-typescript": "^0.23.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  }
+}
