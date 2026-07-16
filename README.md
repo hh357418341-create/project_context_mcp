@@ -1,51 +1,53 @@
 # Project Context MCP
 
-Project Context MCP is a local-first, cross-session project intelligence and memory server for coding agents. It incrementally indexes project text and code, stores sourced decisions and constraints, persists task checkpoints, and assembles task-focused context through MCP.
+**中文** | [English](README.en.md)
 
-## Personal Storage Capabilities (v0.6.1)
+Project Context MCP 是一个面向编码智能体的本地优先、跨会话项目智能与记忆服务。它可以增量索引项目文本和代码，保存有明确来源的决策与约束，持久化任务检查点，并通过 MCP 为当前任务组装聚焦的项目上下文。
 
-- User-selected persistent storage; no silent MCP-side initialization
-- Project registry shared across Codex, Claude Code, Cursor, and other MCP clients
-- Project databases stored with their projects at `<project>/.project-context/project.db`
-- SQLite WAL databases with hybrid FTS5, Unicode n-gram, and code-relationship search
-- Coverage-normalized n-gram ranking merged with FTS results and exact symbol-name boosts
-- Directory-pruned `.gitignore` and `.project-context-ignore` aware incremental indexing
-- Per-project index locking, MCP cancellation, and progress notifications
-- Deferred legacy n-gram migrations with cancellable, bounded-transaction rebuilds during `project_index`
-- Root-aware pruning of Codex runtime sessions, caches, logs, attachments, and local secret stores
-- Indexed chunk foreign keys for predictable source cleanup on large existing databases
-- Default exclusion of `.env`, credentials, private keys, databases, binaries, generated folders, and large files
-- Tree-sitter symbol indexing for TypeScript, TSX, JavaScript, JSX, MJS, and CJS
-- Import, call, extends, and implements relationships included in search and task context
-- Git status and diff-hash evidence without persisting full diffs
-- Reviewable memory candidates from Git changes, indexed knowledge documents, and completed task checkpoints
-- Stable candidate deduplication and document-candidate superseding across Git and non-Git projects
-- File-source bindings that mark active memories stale when their evidence changes or disappears
-- Paragraph fingerprints that keep file memories active when unrelated parts of a large file change
-- Structured memory types and lifecycle states, including superseding decisions
-- Native user memories with `user`, `workspace`, `project`, `module`, and `task` scopes
-- Cross-session tasks and checkpoints
-- Task-ranked `project_context` assembly with related code symbols and a strictly enforced token budget
-- Task-relevant scoped constraints while retaining project-wide constraints with an empty scope
-- Deterministic local quality evaluation for retrieval, context selection, memory candidates, and latency
-- Explicit project and output root allowlists with symlink-aware output validation
-- Structured MCP tool results, output schemas, resources, resource templates, and workflow prompts
-- Versioned in-place database migrations, integrity diagnosis, FTS repair, backup, and JSONL export
-- Validated restore into a new project or an explicitly confirmed archived project
-- Project rename, archive, unarchive, relocation, previewed deletion, and guarded purge
-- Process-lifetime debounced file watchers that index changes without accepting candidates
-- Streaming AES-256-GCM encrypted backup and restore with scrypt-derived keys
-- Secure localhost project workspace with project portraits, scoped user rules, and assembled-context preview
-- CLI and stdio MCP server built on the same Core
+## 个人存储能力（v0.6.1）
 
-LSP, embeddings, a management UI, remote storage, and team synchronization remain deferred.
+- 由用户明确选择持久化存储位置，MCP 服务不会静默初始化
+- Codex、Claude Code、Cursor 及其他 MCP 客户端共享项目注册表
+- 项目数据库随项目存放在 `<project>/.project-context/project.db`
+- 使用 SQLite WAL，并结合 FTS5、Unicode n-gram 与代码关系搜索
+- 将覆盖率归一化的 n-gram 排名、FTS 结果和精确符号名加权合并
+- 增量索引支持 `.gitignore` 和 `.project-context-ignore`，并在目录层提前剪枝
+- 每项目索引锁、MCP 取消操作和进度通知
+- 旧版 n-gram 迁移延迟到 `project_index`，采用可取消、有界事务的批量重建
+- 根据项目根目录识别并排除 Codex 运行会话、缓存、日志、附件和本地密钥存储
+- 为已索引文本块建立外键索引，保证大型数据库中的来源清理行为可预期
+- 默认排除 `.env`、凭据、私钥、数据库、二进制文件、生成目录和大文件
+- 使用 Tree-sitter 索引 TypeScript、TSX、JavaScript、JSX、MJS 和 CJS 符号
+- 搜索与任务上下文包含导入、调用、继承和实现关系
+- 记录 Git 状态与差异哈希证据，但不持久化完整 diff
+- 从 Git 变更、已索引知识文档和已完成任务生成待审核记忆候选
+- Git 与非 Git 项目均支持稳定的候选去重和文档候选替代
+- 文件来源发生变化或消失时，将关联的活跃记忆标记为过期
+- 使用段落指纹，避免大文件中无关内容变化导致记忆失效
+- 支持结构化记忆类型、生命周期状态和决策替代关系
+- 原生用户记忆支持 `user`、`workspace`、`project`、`module` 和 `task` 作用域
+- 支持跨会话任务和检查点
+- `project_context` 按任务相关性组装上下文，包含关联代码符号并严格执行 Token 预算
+- 选择与任务相关的作用域约束，同时保留作用域为空的项目级约束
+- 本地确定性质量评估覆盖检索、上下文选择、记忆候选和延迟
+- 项目根目录和输出根目录使用显式允许列表，并校验符号链接后的真实输出路径
+- MCP 工具提供结构化结果、输出 Schema、资源、资源模板和工作流提示词
+- 支持版本化的原地数据库迁移、完整性诊断、FTS 修复、备份和 JSONL 导出
+- 支持恢复为新项目，或在明确确认后覆盖已归档项目
+- 支持项目重命名、归档、取消归档、迁移、删除预览和受保护的永久删除
+- 进程生命周期内提供带防抖的文件监听，只执行索引而不会自动接受候选
+- 使用 scrypt 派生密钥的流式 AES-256-GCM 加密备份与恢复
+- 安全的本地主机项目工作台，包含项目画像、作用域用户规则和上下文预览
+- CLI 与 stdio MCP 服务共用同一套核心实现
 
-## Requirements
+LSP、向量嵌入、远程存储和团队同步仍属于后续规划。当前已提供本地 Web 管理工作台。
 
-- Node.js 22 or newer
-- npm 10 or newer
+## 环境要求
 
-## Install And Build
+- Node.js 22 或更高版本
+- npm 10 或更高版本
+
+## 安装与构建
 
 ```powershell
 npm install
@@ -56,38 +58,29 @@ npm run eval
 npm run benchmark
 ```
 
-## Quality Evaluation
+## 质量评估
 
-`npm run eval` creates isolated temporary projects and measures deterministic English and CJK document
-retrieval, exact code-symbol retrieval, active-memory retrieval, scoped context selection, candidate-memory
-precision and recall, token-budget compliance, and local latency. It exits non-zero when a quality threshold
-is missed. No network service, embedding model, or external project data is used.
+`npm run eval` 会创建隔离的临时项目，确定性测量英文和 CJK 文档检索、精确代码符号检索、活跃记忆检索、作用域上下文选择、候选记忆的准确率与召回率、Token 预算合规性以及本地延迟。任何质量指标未达阈值时，命令都会以非零状态退出。评估不使用网络服务、嵌入模型或外部项目数据。
 
-`npm run benchmark` runs 100 query and context iterations and prints timing-only JSON. Latency values are
-machine-dependent and should be compared on the same host without competing workloads; quality metrics are
-the portable regression gate.
+`npm run benchmark` 会执行 100 次查询和上下文迭代，并输出只包含耗时的 JSON。延迟与机器环境相关，应在没有竞争负载的同一主机上比较；质量指标才是可移植的回归门槛。
 
-The captured reports are stored in `docs/baselines/v0.3.1.json` and `docs/baselines/v0.4.0.json`. On the deterministic fixture,
-v0.4.0 improves search MRR from `0.707` to `0.900`, Top-1 recall from `0.600` to `0.800`, and selected-memory
-precision from `0.667` to `1.000`, while preserving Recall@5, required-memory recall, candidate precision,
-candidate recall, and candidate type accuracy at `1.000`.
+评估报告保存在 `docs/baselines/v0.3.1.json` 和 `docs/baselines/v0.4.0.json`。在确定性测试数据上，v0.4.0 将搜索 MRR 从 `0.707` 提升到 `0.900`，Top-1 召回率从 `0.600` 提升到 `0.800`，已选择记忆的准确率从 `0.667` 提升到 `1.000`；同时 Recall@5、必需记忆召回率、候选准确率、候选召回率和候选类型准确率均保持 `1.000`。
 
-## Choose Memory Storage
+## 选择记忆存储位置
 
-Run the interactive initializer:
+运行交互式初始化程序：
 
 ```powershell
 node dist/cli.js init
 ```
 
-It chooses where shared registry data and recovery backups are stored. Project databases themselves always
-live at `<project>/.project-context/project.db`. The initializer offers:
+初始化程序用于选择共享注册表数据和恢复备份的存储位置。项目数据库始终位于 `<project>/.project-context/project.db`。可选位置包括：
 
-1. User directory, recommended: `%USERPROFILE%\.project-context`
-2. Current project: `<project>\.project-context`
-3. A custom absolute path
+1. 用户目录，推荐：`%USERPROFILE%\.project-context`
+2. 当前项目：`<project>\.project-context`
+3. 自定义绝对路径
 
-For automation:
+自动化环境可使用：
 
 ```powershell
 node dist/cli.js init --storage user --allow-project-root D:\project
@@ -95,41 +88,38 @@ node dist/cli.js init --storage project --project-root D:\project\my-app
 node dist/cli.js init --storage D:\ProjectMemory --allow-project-root D:\project --allow-output-root D:\ProjectMemory
 ```
 
-`PROJECT_CONTEXT_HOME` overrides the shared registry and recovery location for temporary or isolated environments.
-When using it, configure semicolon-separated `PROJECT_CONTEXT_ALLOWED_ROOTS` and
-`PROJECT_CONTEXT_ALLOWED_OUTPUT_ROOTS` on Windows (`:`-separated on POSIX). Existing registered
-projects remain usable after upgrading; registering a new project requires an allowed root.
+`PROJECT_CONTEXT_HOME` 可在临时或隔离环境中覆盖共享注册表和恢复目录。使用该变量时，请配置 `PROJECT_CONTEXT_ALLOWED_ROOTS` 和 `PROJECT_CONTEXT_ALLOWED_OUTPUT_ROOTS`：Windows 使用分号分隔，POSIX 使用冒号分隔。升级后，已注册项目仍可继续使用；注册新项目时，其路径必须位于允许的根目录中。
 
-## CLI Workflow
+## CLI 工作流
 
 ```powershell
-# Register a project and retain the returned project ID
+# 注册项目并保存返回的项目 ID
 node dist/cli.js project open D:\project\my-app
 
-# Incrementally index it
+# 执行增量索引
 node dist/cli.js index <project-id>
 
-# Or keep an explicit process-lifetime watcher running
+# 或保持显式的进程生命周期文件监听
 node dist/cli.js watch <project-id> --debounce 1000
 
-# Open the local rule manager in the system browser
+# 在系统浏览器中打开本地工作台
 node dist/cli.js ui
 
-# Search indexed content, symbols, and active memories
+# 搜索已索引内容、代码符号和活跃记忆
 node dist/cli.js search <project-id> "refresh token"
 
-# Review sourced candidates after indexing documents or completing tasks
+# 索引文档或完成任务后，审核有来源的候选记忆
 node dist/cli.js memory candidates <project-id>
 node dist/cli.js memory accept <project-id> <candidate-id>
 
-# Store a sourced decision
+# 保存一条有来源的决策
 node dist/cli.js memory add <project-id> `
   --type decision `
   --title "Rotate refresh tokens" `
   --content "Refresh tokens rotate after every successful use." `
   --source-kind user
 
-# Store a preference shared across projects
+# 保存跨项目共享的偏好
 node dist/cli.js user-memory add `
   --type preference `
   --title "Test runner" `
@@ -137,24 +127,24 @@ node dist/cli.js user-memory add `
   --source-kind user `
   --scope-level user
 
-# Start and later resume a task
+# 开始任务并在之后恢复
 node dist/cli.js task start <project-id> "Implement token reuse detection"
 node dist/cli.js task checkpoint <project-id> <task-id> `
   --completed "Added token family" `
   --next "Add reuse test" `
   --changed-file "src/auth/auth.service.ts"
 
-# Assemble context for a new session
+# 为新会话组装任务上下文
 node dist/cli.js context <project-id> "Continue token reuse detection"
 
-# Diagnose and repair derived FTS indexes
+# 诊断并修复派生的 FTS 索引
 node dist/cli.js doctor <project-id> --repair
 
-# Create durable operational copies; destinations must be absolute and new/empty
+# 创建持久化运维副本；目标必须是新的绝对路径或空目录
 node dist/cli.js backup <project-id> D:\ProjectMemoryBackups\my-app.db
 node dist/cli.js export <project-id> D:\ProjectMemoryExports\my-app
 
-# Keep the passphrase out of command history and process arguments
+# 避免将口令写入命令历史或进程参数
 $env:PROJECT_CONTEXT_BACKUP_PASSPHRASE = "<a strong private passphrase>"
 node dist/cli.js backup-encrypted <project-id> D:\ProjectMemoryBackups\my-app.pcmb `
   --passphrase-env PROJECT_CONTEXT_BACKUP_PASSPHRASE
@@ -163,38 +153,23 @@ node dist/cli.js project restore-encrypted D:\ProjectMemoryBackups\my-app.pcmb `
   --root D:\project\restored-app
 ```
 
-Project deletion is deliberately two-step. Archive first, call `project delete` without `--purge` to inspect
-the counts, then purge with an exact project-ID confirmation. Purge is blocked while active memories,
-in-progress tasks, or pending candidates remain. A missing project directory never causes automatic deletion.
+项目删除被设计为两个步骤：先归档，再调用不带 `--purge` 的 `project delete` 检查影响数量，最后使用精确的项目 ID 确认执行永久删除。存在活跃记忆、进行中任务或待审核候选时，永久删除会被阻止。项目目录缺失不会触发自动删除。
 
-## Local Rule Manager
+## 本地项目工作台
 
-`project-context ui` starts an ephemeral HTTP server bound only to `127.0.0.1`, chooses an available port,
-and opens the system browser. Its project portrait summarizes indexing health, code intelligence, file types,
-Git state, memories, candidates, tasks, and primary indexed sources. The UI also manages `user`, `workspace`,
-`project`, `module`, and `task` scoped rules.
+`project-context ui` 会启动一个仅绑定到 `127.0.0.1` 的临时 HTTP 服务，自动选择可用端口并打开系统浏览器。项目画像汇总索引健康状态、代码智能、文件类型、Git 状态、记忆、候选、任务和主要索引来源。工作台还可以管理 `user`、`workspace`、`project`、`module` 和 `task` 作用域规则。
 
-The portrait includes an interactive Cytoscape.js relationship graph. Its file-level view aggregates project
-dependencies without sending every raw relation to the browser; selecting or searching a file or symbol can
-expand one or two symbol neighborhoods on demand. Nodes are draggable, and the canvas supports pan, zoom,
-fit, force-directed, layered, and circular layouts. `IMPORTS`, `CALLS`, `EXTENDS`, and `IMPLEMENTS` relations
-can be filtered independently, while node details remain tied to indexed source paths and line numbers.
-Editing an active rule creates a new version and marks the previous version `superseded`; stopping a rule uses
-the auditable `deleted` lifecycle state rather than physically deleting it. Superseded history cannot be
-reactivated into a second active version.
+项目画像包含基于 Cytoscape.js 的交互式关系图。文件级视图会聚合项目依赖，而不是将每条原始关系都发送到浏览器；选择或搜索文件及符号后，可以按需展开一跳或两跳符号邻域。节点可自由拖拽，画布支持平移、缩放、适配，以及力导向、分层和环形布局。`IMPORTS`、`CALLS`、`EXTENDS`、`IMPLEMENTS` 关系可以独立筛选，节点详情会关联到已索引的源码路径和行号。
 
-The context-preview view runs the real `project_context` pipeline for a selected project and simulated task.
-It shows the selected user rules, project constraints and decisions, active task checkpoints, indexed evidence,
-warnings, and actual token-budget usage.
+编辑活跃规则会创建新版本并将旧版本标记为 `superseded`；停用规则使用可审计的 `deleted` 生命周期状态，而不是物理删除。已被替代的历史版本不能重新激活为第二个活跃版本。
 
-The browser session uses a random launch token exchanged for an `HttpOnly`, `SameSite=Strict` cookie. API
-requests validate `Host`, same-origin state-changing requests, a custom UI header, JSON schemas, and a 64 KiB
-body limit. The server sends a restrictive Content Security Policy and never listens on `0.0.0.0`. Use
-`project-context ui --no-open` only for automation; it prints the one-time launch URL to the terminal.
+上下文预览会针对选定项目和模拟任务运行真实的 `project_context` 流程，展示选中的用户规则、项目约束与决策、活跃任务检查点、索引证据、警告以及实际 Token 预算使用情况。
 
-## Codex MCP Configuration
+浏览器会话使用随机启动令牌，并将其交换为 `HttpOnly`、`SameSite=Strict` Cookie。API 会校验 `Host`、同源状态变更请求、自定义 UI 请求头、JSON Schema 和 64 KiB 请求体上限。服务返回严格的内容安全策略，并且不会监听 `0.0.0.0`。`project-context ui --no-open` 仅供自动化使用，它会将一次性启动 URL 输出到终端。
 
-Build first, then add this to `~/.codex/config.toml`:
+## Codex MCP 配置
+
+先完成构建，然后将以下配置添加到 `~/.codex/config.toml`：
 
 ```toml
 [mcp_servers.project-context]
@@ -202,59 +177,45 @@ command = "node"
 args = ["D:/project/project-context-mcp/dist/mcp/server.js"]
 ```
 
-Initialize storage once through the CLI before using project tools. The MCP server itself remains available when storage is missing and `storage_status` returns the required setup command.
+使用项目工具前，需要先通过 CLI 初始化一次存储。存储尚未初始化时，MCP 服务仍然可以启动，`storage_status` 会返回需要执行的配置命令。
 
-## MCP Tools (34)
+## MCP 工具（34 个）
 
 - `storage_status`
-- `project_open`, `project_list`, `project_update`, `project_archive`, `project_unarchive`, `project_relocate`
-- `project_delete`, `project_restore`, `project_restore_encrypted`
-- `project_index`, `project_search`, `project_context`, `project_health`
-- `project_watch_start`, `project_watch_stop`, `project_watch_list`
-- `project_doctor`, `project_backup`, `project_backup_encrypted`, `project_export`
-- `memory_remember`, `memory_list`, `memory_update_status`
-- `memory_candidates`, `memory_candidate_accept`, `memory_candidate_reject`
-- `user_memory_remember`, `user_memory_list`, `user_memory_update_status`
-- `task_start`, `task_checkpoint`, `task_list`, `task_complete`
+- `project_open`、`project_list`、`project_update`、`project_archive`、`project_unarchive`、`project_relocate`
+- `project_delete`、`project_restore`、`project_restore_encrypted`
+- `project_index`、`project_search`、`project_context`、`project_health`
+- `project_watch_start`、`project_watch_stop`、`project_watch_list`
+- `project_doctor`、`project_backup`、`project_backup_encrypted`、`project_export`
+- `memory_remember`、`memory_list`、`memory_update_status`
+- `memory_candidates`、`memory_candidate_accept`、`memory_candidate_reject`
+- `user_memory_remember`、`user_memory_list`、`user_memory_update_status`
+- `task_start`、`task_checkpoint`、`task_list`、`task_complete`
 
-`project_index` returns symbol/relation totals, stale memory IDs, newly generated candidates, and Git metadata. Git evidence is preferred when available; projects without Git can still generate candidates from added or changed indexed knowledge documents. Completing a task can generate bounded candidates from its summary, risks, and explicitly durable completed items. It never returns or stores the full diff. Candidate memories remain review-only until `memory_candidate_accept` is called.
+`project_index` 会返回符号与关系总数、过期记忆 ID、新生成的候选以及 Git 元数据。存在 Git 时优先使用 Git 证据；没有 Git 的项目仍可以根据新增或修改的知识文档生成候选。完成任务时，可从任务摘要、风险和明确具有长期价值的已完成事项中生成有界候选。系统不会返回或保存完整 diff。候选记忆在调用 `memory_candidate_accept` 前始终只处于待审核状态。
 
-Opening a database created before schema v4 only creates the n-gram table and returns immediately. Existing
-content is rebuilt in small committed batches during the next `project_index`, where MCP cancellation and
-progress reporting remain active. An interrupted rebuild stays marked incomplete and is safely retried by a
-later index run. `project_doctor` reports this state and can also repair it explicitly.
+打开 Schema v4 之前创建的数据库时，只会创建 n-gram 表并立即返回。现有内容会在下一次 `project_index` 中通过小批量提交重建，期间 MCP 取消和进度报告保持有效。中断的重建会继续标记为未完成，并在之后的索引运行中安全重试。`project_doctor` 会报告该状态，也可以显式修复。
 
-Schema v5 adds an index on `chunks(source_id)`. This keeps source removal and foreign-key checks proportional
-to the affected chunks instead of repeatedly scanning the entire chunk table.
+Schema v5 为 `chunks(source_id)` 添加索引，使来源删除和外键检查只与受影响的文本块数量相关，避免反复扫描整个文本块表。
 
-Project schema v6 adds paragraph excerpts and excerpt hashes to file-source memory bindings. When a whole-file
-hash changes but the normalized source paragraph still exists, the binding refreshes its file hash and line
-range and remains active. A changed or missing paragraph becomes `stale`; legacy bindings without an excerpt
-retain conservative whole-file invalidation. Registry schema v2 adds project archival state and user memories.
+项目 Schema v6 为文件来源记忆绑定增加段落摘录和摘录哈希。当整文件哈希变化但标准化后的来源段落仍然存在时，绑定会更新文件哈希与行号范围并保持活跃；段落变化或缺失时则变为 `stale`。没有摘录的旧版绑定继续使用保守的整文件失效策略。注册表 Schema v2 增加项目归档状态和用户记忆。
 
-`project_watch_start` is controlled runtime automation: it lives only for the MCP or CLI process lifetime,
-debounces file events, runs the same incremental `project_index`, and reports its last run or error. It never
-accepts memory candidates. Watch state is not persisted, so restart it explicitly after a process restart.
+`project_watch_start` 属于受控的运行时自动化：它只在 MCP 或 CLI 进程生命周期内存在，对文件事件防抖，运行相同的增量 `project_index`，并报告最近一次运行结果或错误。它不会接受记忆候选。监听状态不会持久化，进程重启后需要显式重新启动。
 
-Encrypted backups use a versioned authenticated format with a random salt and IV, scrypt key derivation, and
-AES-256-GCM. MCP and CLI calls accept only an environment-variable name (`passphraseEnv`), never a raw
-passphrase. The passphrase is not stored, so losing it makes the backup unrecoverable. Plaintext temporary
-backup files are removed after success or failure.
+加密备份使用带版本号的认证格式，包含随机盐和 IV、scrypt 密钥派生以及 AES-256-GCM。MCP 和 CLI 只接受环境变量名称 `passphraseEnv`，不接受原始口令。口令不会被存储，因此一旦丢失，备份将无法恢复。无论成功还是失败，明文临时备份文件都会被删除。
 
-When the registered project root itself is named `.codex`, runtime-only directories such as `sessions`,
-`.tmp`, `plugins/cache`, logs, attachments, SQLite state, and secret stores are excluded automatically.
-Directories with the same names remain indexable in ordinary application repositories.
+当注册的项目根目录本身名为 `.codex` 时，系统会自动排除 `sessions`、`.tmp`、`plugins/cache`、日志、附件、SQLite 状态和密钥存储等运行时目录。普通应用仓库中的同名目录仍可被索引。
 
-All tools return both backward-compatible JSON TextContent and validated `structuredContent`.
+所有工具都会同时返回向后兼容的 JSON `TextContent` 和经过校验的 `structuredContent`。
 
-## MCP Resources And Prompts
+## MCP 资源与提示词
 
-- Static project registry: `project-context://projects`
-- Templates for project health, individual memories, tasks, and indexed sources
-- `resume-project-task` prompt for task-focused context and checkpoints
-- `review-memory-candidates` prompt for explicit candidate review
+- 静态项目注册表：`project-context://projects`
+- 项目健康状态、单条记忆、任务和索引来源的资源模板
+- 用于任务上下文和检查点恢复的 `resume-project-task` 提示词
+- 用于显式审核候选的 `review-memory-candidates` 提示词
 
-## Storage Layout
+## 存储结构
 
 ```text
 <storage-root>/
@@ -267,10 +228,6 @@ All tools return both backward-compatible JSON TextContent and validated `struct
     └── project.db
 ```
 
-`registry.db` contains project registrations and user-level memories. Per-project databases contain indexes,
-project memories, candidate audit records, and task checkpoints. The recovery directory receives an internal
-safety backup before an archived project database is overwritten or a legacy central database is migrated.
-Registry schema v3 migrates existing `<storage-root>/projects/<project-id>/project.db` files into their registered
-project roots after taking a validated recovery snapshot. `.project-context/` is always excluded from indexing
-and is included in the repository `.gitignore`. Full chat transcripts, full Git diffs,
-detected secret values, and encryption passphrases are not stored.
+`registry.db` 保存项目注册信息和用户级记忆。每项目数据库保存索引、项目记忆、候选审计记录和任务检查点。在覆盖已归档项目数据库或迁移旧版中央项目数据库前，系统会在 recovery 目录中创建内部安全备份。
+
+注册表 Schema v3 会先创建经过校验的恢复快照，再将现有 `<storage-root>/projects/<project-id>/project.db` 迁移到对应项目根目录。`.project-context/` 始终不参与索引，并已加入仓库的 `.gitignore`。系统不会存储完整聊天记录、完整 Git diff、检测到的密钥值或加密口令。
