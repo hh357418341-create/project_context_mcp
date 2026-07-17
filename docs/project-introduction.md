@@ -686,6 +686,8 @@ args = ["D:/project/project-context-mcp/dist/mcp/server.js"]
 
 MCP 负责索引和 watcher 的内部调度，但它不能主动感知 Codex 何时进入了某个仓库。需要用一段全局规则引导 Codex 在会话首个任务中调用 `project_open`：
 
+首次安装后的最小配置闭环是：先用 CLI 初始化个人存储与允许的项目根目录，再把 MCP 注册到 Codex，最后追加下面的全局 `AGENTS.md` 区块。这三项只需配置一次；完成后，每个项目和每次普通开发任务都不需要重复修改提示词或手动调度索引。
+
 - Windows：编辑 `%USERPROFILE%\.codex\AGENTS.md`；
 - macOS/Linux：编辑 `~/.codex/AGENTS.md`；
 - 文件已有其他个人规则时，只追加下面的受管区块，不要覆盖原内容；

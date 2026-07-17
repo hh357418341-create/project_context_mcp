@@ -175,6 +175,25 @@ node dist/cli.js project restore-encrypted D:\ProjectMemoryBackups\my-app.pcmb `
 
 这里的“默认启动”分为两层：Codex 从全局配置加载 MCP 服务；全局 `AGENTS.md` 指示 Codex 在新会话的第一个用户回合打开当前项目并获取任务上下文。`project_open` 会在 MCP 内部完成首次或增量索引并启动变更监听，无需再要求 Codex 调用 `project_index` 或 `project_watch_start`。仅打开 Codex 而不开始对话时，不会在后台扫描磁盘。
 
+### 安装完成后还要配置什么
+
+首次安装后需要完成下面 3 项一次性配置，缺少其中任何一项都可能导致 Codex 看得到 MCP、但没有真正打开和索引当前项目：
+
+| 一次性配置 | 作用 | 完成标志 |
+| --- | --- | --- |
+| 初始化个人存储和允许的项目根目录 | 决定共享注册表、恢复目录和允许索引的代码目录 | `storage_status` 返回 `configured: true` |
+| 将 MCP 注册到 Codex 全局配置 | 让 Codex 可以启动 `project-context-mcp` | `codex mcp get project-context` 显示 `enabled: true` |
+| 将推荐区块追加到全局 `AGENTS.md` | 引导 Codex 在仓库首个任务中调用 `project_open` | 新会话依次调用 `storage_status`、`project_open`、`project_context` |
+
+全局 `AGENTS.md` 的位置：
+
+- Windows：`%USERPROFILE%\.codex\AGENTS.md`
+- macOS/Linux：`~/.codex/AGENTS.md`
+
+这 3 项只需要配置一次。以后进入位于允许根目录下的任意仓库，直接向 Codex 描述正常开发任务即可，不需要修改项目提示词，也不需要手动调用 `project_index`、`project_watch_start` 或判断任务长短。MCP 会在 `project_open` 后托管当前进程的索引与 watcher；候选记忆仍需人工审核，不会自动进入正式上下文。
+
+下面按顺序给出从安装到验证的完整命令。已经完成某一步的用户可以直接跳到下一步。
+
 ### 第 1 步：安装并构建
 
 ```powershell
@@ -231,7 +250,7 @@ args = ["D:/tools/project-context-mcp/dist/mcp/server.js"]
 - Windows：`%USERPROFILE%\.codex\AGENTS.md`
 - macOS/Linux：`~/.codex/AGENTS.md`
 
-加入下面的启动规则。若文件中已有个人规则，只追加这段，不要覆盖原内容。
+加入下面的启动规则。若文件中已有个人规则，只追加这段，不要覆盖原内容。这里修改的是 Codex 的全局规则，不是当前代码仓库里的 `AGENTS.md`。
 
 ```markdown
 <!-- project-context-mcp:start -->
@@ -255,6 +274,8 @@ Use project-context-mcp to retain sourced project knowledge across Codex session
 ```
 
 启动流程必须放在 Codex 的全局 `AGENTS.md`，不能只放在 Project Context 工作台的“全局规则”中。工作台规则只有在 `project_context` 已被调用后才能返回，无法负责引导第一次 MCP 调用。
+
+完成这一步后，不需要为每个项目重复添加相同区块，也不需要在日常任务提示词中写“请启动 watcher”或“修改后重新索引”。
 
 ### 第 5 步：验证第一次自动初始化
 
