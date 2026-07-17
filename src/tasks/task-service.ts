@@ -53,7 +53,11 @@ export function checkpointTask(db: SqliteDatabase, taskId: string, checkpoint: T
 }
 
 export function completeTask(db: SqliteDatabase, taskId: string, checkpoint?: TaskCheckpoint): TaskRecord {
-  ensureTask(db, taskId);
+  const current = getTask(db, taskId);
+  if (current.status === "completed") return current;
+  if (current.status !== "in_progress") {
+    throw new ProjectContextError("TASK_TRANSITION_BLOCKED", `Only an in-progress task can be completed: ${taskId}`);
+  }
   const timestamp = nowIso();
   if (checkpoint) {
     db.prepare(`
@@ -66,13 +70,27 @@ export function completeTask(db: SqliteDatabase, taskId: string, checkpoint?: Ta
   return getTask(db, taskId);
 }
 
+export function cancelTask(db: SqliteDatabase, taskId: string): TaskRecord {
+  const current = getTask(db, taskId);
+  if (current.status === "cancelled") return current;
+  if (current.status !== "in_progress") {
+    throw new ProjectContextError("TASK_TRANSITION_BLOCKED", `Only an in-progress task can be cancelled: ${taskId}`);
+  }
+  const timestamp = nowIso();
+  db.prepare("UPDATE tasks SET status = 'cancelled', updated_at = ?, completed_at = ? WHERE id = ?")
+    .run(timestamp, timestamp, taskId);
+  return getTask(db, taskId);
+}
+
 export function listTasks(db: SqliteDatabase, status = "in_progress", limit = 20): TaskRecord[] {
   return (db.prepare("SELECT * FROM tasks WHERE status = ? ORDER BY updated_at DESC LIMIT ?")
     .all(status, limit) as TaskRow[]).map(mapTask);
 }
 
 export function getTask(db: SqliteDatabase, taskId: string): TaskRecord {
-  return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as TaskRow);
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as TaskRow | undefined;
+  if (!row) throw new ProjectContextError("TASK_NOT_FOUND", `Unknown task: ${taskId}`);
+  return mapTask(row);
 }
 
 function ensureTask(db: SqliteDatabase, taskId: string): void {

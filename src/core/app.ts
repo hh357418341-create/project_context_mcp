@@ -31,6 +31,7 @@ import {
 import { backupProjectDatabase, doctorProject, exportProject } from "../maintenance/maintenance-service.js";
 import {
   checkpointTask,
+  cancelTask,
   completeTask,
   listTasks,
   getTask,
@@ -294,6 +295,10 @@ export class ProjectContextApp {
     });
   }
 
+  cancelTask(projectId: string, taskId: string): TaskRecord {
+    return this.withDb(projectId, (db) => cancelTask(db, taskId));
+  }
+
   tasks(projectId: string, status = "in_progress", limit = 20): TaskRecord[] {
     return this.withDb(projectId, (db) => listTasks(db, status, limit));
   }
@@ -381,9 +386,11 @@ export class ProjectContextApp {
           .slice(0, 10),
         primarySources: sources.slice(0, 8),
         recentMemories: listMemories(db, "active", 6),
+        staleMemories: listMemories(db, "stale", 6),
         activeTasks: listTasks(db, "in_progress", 6),
         completedTasks: listTasks(db, "completed", 4),
         pendingCandidates: listCandidates(db, "pending", 6),
+        watch: this.watchList().find((item) => item.projectId === projectId) ?? null,
       };
     });
   }

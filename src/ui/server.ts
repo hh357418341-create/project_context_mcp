@@ -130,6 +130,59 @@ async function routeRequest(
       await withApp(response, (app) => app.portrait(projectId));
       return;
     }
+    const projectActionMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/(index|watch)$/);
+    if (projectActionMatch) {
+      const projectId = decodeSegment(projectActionMatch[1]!);
+      const action = projectActionMatch[2]!;
+      if (request.method === "POST" && action === "index") {
+        await withApp(response, (app) => app.index(projectId));
+        return;
+      }
+      if (request.method === "POST" && action === "watch") {
+        const input = z.object({ debounceMs: z.number().int().min(100).max(60_000).default(1_000) })
+          .strict().parse(await readJsonBody(request));
+        await withApp(response, (app) => app.watchStart(projectId, input.debounceMs, false));
+        return;
+      }
+      if (request.method === "DELETE" && action === "watch") {
+        await withApp(response, (app) => app.watchStop(projectId));
+        return;
+      }
+    }
+    const projectMemoryMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/memories\/([^/]+)\/status$/);
+    if (request.method === "PATCH" && projectMemoryMatch) {
+      const projectId = decodeSegment(projectMemoryMatch[1]!);
+      const memoryId = decodeSegment(projectMemoryMatch[2]!);
+      const input = z.object({ status: z.literal("deleted") }).strict().parse(await readJsonBody(request));
+      await withApp(response, (app) => {
+        const current = app.memory(projectId, memoryId);
+        if (current.status !== "stale" && current.status !== "conflicted") {
+          throw new ProjectContextError("PROJECT_MEMORY_DELETE_BLOCKED", "Only stale or conflicted memories can be deleted here.");
+        }
+        return app.setMemoryStatus(projectId, memoryId, input.status);
+      });
+      return;
+    }
+    const candidateActionMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/candidates\/([^/]+)\/(accept|reject)$/);
+    if (request.method === "POST" && candidateActionMatch) {
+      const projectId = decodeSegment(candidateActionMatch[1]!);
+      const candidateId = decodeSegment(candidateActionMatch[2]!);
+      const action = candidateActionMatch[3]!;
+      await withApp(response, (app) => action === "accept"
+        ? app.acceptCandidate(projectId, candidateId)
+        : app.rejectCandidate(projectId, candidateId));
+      return;
+    }
+    const taskActionMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks\/([^/]+)\/(complete|cancel)$/);
+    if (request.method === "POST" && taskActionMatch) {
+      const projectId = decodeSegment(taskActionMatch[1]!);
+      const taskId = decodeSegment(taskActionMatch[2]!);
+      const action = taskActionMatch[3]!;
+      await withApp(response, (app) => action === "complete"
+        ? app.completeTask(projectId, taskId)
+        : app.cancelTask(projectId, taskId));
+      return;
+    }
     const graphMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/graph$/);
     if (request.method === "GET" && graphMatch) {
       const projectId = decodeSegment(graphMatch[1]!);
@@ -211,10 +264,13 @@ async function routeRequest(
   }
 }
 
-async function withApp(response: ServerResponse, callback: (app: ProjectContextApp) => unknown): Promise<void> {
+async function withApp(
+  response: ServerResponse,
+  callback: (app: ProjectContextApp) => unknown | Promise<unknown>,
+): Promise<void> {
   const app = await ProjectContextApp.create();
   try {
-    sendJson(response, 200, callback(app));
+    sendJson(response, 200, await callback(app));
   } finally {
     app.close();
   }

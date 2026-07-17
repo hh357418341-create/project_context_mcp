@@ -25,7 +25,7 @@ const checkpointSchema = {
 const outputSchema = { result: z.unknown() };
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "project-context-mcp", version: "0.6.1" });
+  const server = new McpServer({ name: "project-context-mcp", version: "0.7.0" });
 
   server.registerTool("storage_status", {
     description: "Check whether persistent Project Context storage has been configured.",
@@ -374,6 +374,13 @@ export function createMcpServer(): McpServer {
     inputSchema: { projectId: z.string().min(1), taskId: z.string().min(1) },
     annotations: { idempotentHint: true },
   }, ({ projectId, taskId }) => withApp((app) => app.completeTask(projectId, taskId)));
+
+  server.registerTool("task_cancel", {
+    description: "Cancel an in-progress persistent task while retaining its latest checkpoint.",
+    outputSchema,
+    inputSchema: { projectId: z.string().min(1), taskId: z.string().min(1) },
+    annotations: { destructiveHint: true, idempotentHint: true },
+  }, ({ projectId, taskId }) => withApp((app) => app.cancelTask(projectId, taskId)));
 
   server.registerTool("project_health", {
     description: "Report source, chunk, memory, task, and latest index-run health for a project.",

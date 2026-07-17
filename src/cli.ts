@@ -14,7 +14,7 @@ import { startUiServer } from "./ui/server.js";
 const program = new Command()
   .name("project-context")
   .description("Cross-session project intelligence and memory")
-  .version("0.6.1")
+  .version("0.7.0")
   .showHelpAfterError();
 
 program.command("init")
@@ -299,6 +299,10 @@ task.command("complete")
   .argument("<project-id>")
   .argument("<task-id>")
   .action(withApp((app, projectId: string, taskId: string) => print(app.completeTask(projectId, taskId))));
+task.command("cancel")
+  .argument("<project-id>")
+  .argument("<task-id>")
+  .action(withApp((app, projectId: string, taskId: string) => print(app.cancelTask(projectId, taskId))));
 
 program.command("context")
   .argument("<project-id>")

@@ -47,6 +47,22 @@ describe("localhost rule manager", () => {
     const app = await ProjectContextApp.create();
     const project = await app.openProject(projectRoot);
     await app.index(project.id);
+    const staleMemory = app.remember(project.id, {
+      type: "decision", title: "Old UI baseline", content: "The previous UI baseline is obsolete.",
+      status: "stale", sourceKind: "user",
+    });
+    const activeMemory = app.remember(project.id, {
+      type: "constraint", title: "Keep active", content: "Active project memory must not be deleted by stale cleanup.",
+      sourceKind: "user",
+    });
+    const reviewTask = app.startTask(project.id, "Generate review candidates");
+    app.completeTask(project.id, reviewTask.id, {
+      summary: "The project portrait must expose explicit knowledge review actions.",
+      completed: [], next: [], changedFiles: [], verification: [], blockers: [],
+      risks: ["Automatic indexing must never accept memory candidates."],
+    });
+    const taskToComplete = app.startTask(project.id, "Finish project portrait cleanup");
+    const taskToCancel = app.startTask(project.id, "Retire obsolete project portrait work");
     app.close();
     ui = await startUiServer({ openBrowser: false });
     const origin = ui.url;
@@ -74,10 +90,61 @@ describe("localhost rule manager", () => {
     expect(portrait.body).toMatchObject({
       project: { id: project.id, name: "project" },
       health: { sources: 3, schemaVersion: 6 },
-      statuses: { memories: {}, candidates: {}, tasks: {} },
+      statuses: {
+        memories: { active: 1, stale: 1 }, candidates: { pending: 2 },
+        tasks: { completed: 1, in_progress: 2 },
+      },
     });
     expect((portrait.body as { fileTypes: Array<{ extension: string; count: number }> }).fileTypes)
       .toEqual(expect.arrayContaining([expect.objectContaining({ extension: ".ts", count: 2 })]));
+
+    const indexed = await api(origin, `/api/projects/${project.id}/index`, { method: "POST", cookie, body: {} });
+    expect(indexed.body).toMatchObject({ errors: [] });
+    const watchStarted = await api(origin, `/api/projects/${project.id}/watch`, {
+      method: "POST", cookie, body: { debounceMs: 100 },
+    });
+    expect(watchStarted.body).toMatchObject({ projectId: project.id, debounceMs: 100 });
+    const watchedPortrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
+    expect(watchedPortrait.body).toMatchObject({ watch: { projectId: project.id } });
+    const watchStopped = await api(origin, `/api/projects/${project.id}/watch`, { method: "DELETE", cookie });
+    expect(watchStopped.body).toMatchObject({ projectId: project.id });
+
+    const projectMemoryBlocked = await api(origin, `/api/projects/${project.id}/memories/${activeMemory.id}/status`, {
+      method: "PATCH", cookie, body: { status: "deleted" },
+    });
+    expect(projectMemoryBlocked.response.status).toBe(400);
+    expect(projectMemoryBlocked.body).toMatchObject({ code: "PROJECT_MEMORY_DELETE_BLOCKED" });
+    const staleDeleted = await api(origin, `/api/projects/${project.id}/memories/${staleMemory.id}/status`, {
+      method: "PATCH", cookie, body: { status: "deleted" },
+    });
+    expect(staleDeleted.body).toMatchObject({ id: staleMemory.id, status: "deleted" });
+
+    const candidates = (portrait.body as { pendingCandidates: Array<{ id: string }> }).pendingCandidates;
+    const accepted = await api(origin, `/api/projects/${project.id}/candidates/${candidates[0]!.id}/accept`, {
+      method: "POST", cookie, body: {},
+    });
+    expect(accepted.body).toMatchObject({ status: "active" });
+    const rejected = await api(origin, `/api/projects/${project.id}/candidates/${candidates[1]!.id}/reject`, {
+      method: "POST", cookie, body: {},
+    });
+    expect(rejected.body).toMatchObject({ status: "rejected" });
+
+    const completedTask = await api(origin, `/api/projects/${project.id}/tasks/${taskToComplete.id}/complete`, {
+      method: "POST", cookie, body: {},
+    });
+    expect(completedTask.body).toMatchObject({ status: "completed" });
+    const cancelledTask = await api(origin, `/api/projects/${project.id}/tasks/${taskToCancel.id}/cancel`, {
+      method: "POST", cookie, body: {},
+    });
+    expect(cancelledTask.body).toMatchObject({ status: "cancelled" });
+    const cleanPortrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
+    expect(cleanPortrait.body).toMatchObject({
+      statuses: {
+        memories: { active: 2, deleted: 1 }, candidates: { accepted: 1, rejected: 1 },
+        tasks: { completed: 2, cancelled: 1 },
+      },
+      staleMemories: [], activeTasks: [], pendingCandidates: [], watch: null,
+    });
 
     const vendor = await fetch(`${origin}/vendor/cytoscape.js`);
     expect(vendor.status).toBe(200);

@@ -28,6 +28,8 @@ export const UI_HTML = String.raw`<!doctype html>
         <div><span class="panel-label">PROJECT PORTRAIT</span><h1>项目画像</h1></div>
         <div class="portrait-actions">
           <div class="field"><label for="portrait-project">项目</label><select id="portrait-project"></select></div>
+          <button id="index-project" class="secondary-button" type="button">立即索引</button>
+          <button id="toggle-watch" class="secondary-button" type="button">启动监听</button>
           <button id="refresh-portrait" class="secondary-button" type="button">刷新画像</button>
         </div>
       </header>
@@ -51,6 +53,7 @@ export const UI_HTML = String.raw`<!doctype html>
           <section class="portrait-section"><header><div><span class="panel-label">KNOWLEDGE</span><h2>知识状态</h2></div></header><div id="portrait-knowledge" class="status-groups"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">ACTIVE WORK</span><h2>进行中的任务</h2></div></header><div id="portrait-tasks" class="portrait-list"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">RECENT MEMORY</span><h2>近期记忆</h2></div></header><div id="portrait-memories" class="portrait-list"></div></section>
+          <section class="portrait-section"><header><div><span class="panel-label">STALE MEMORY</span><h2>待处理记忆</h2></div></header><div id="portrait-stale-memories" class="portrait-list"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">INDEXED SOURCES</span><h2>主要来源</h2></div></header><div id="portrait-sources" class="portrait-list source-list"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">REVIEW QUEUE</span><h2>待审核候选</h2></div></header><div id="portrait-candidates" class="portrait-list"></div></section>
         </div>
@@ -279,7 +282,7 @@ h1, h2, p { margin: 0; }
 .context-empty { margin-top: 80px; }
 .portrait-view { height: 100%; overflow-y: auto; background: var(--surface); }
 .portrait-toolbar { position: sticky; top: 0; z-index: 3; min-height: 84px; background: #fff; }
-.portrait-actions { display: flex; align-items: end; gap: 10px; }
+.portrait-actions { display: flex; flex-wrap: wrap; align-items: end; justify-content: flex-end; gap: 10px; }
 .portrait-actions .field { min-width: min(320px, 38vw); }
 .portrait-identity { padding: 24px; border-bottom: 1px solid var(--line); background: var(--surface-muted); }
 .portrait-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 1280px; margin: 0 auto 20px; }
@@ -324,6 +327,8 @@ h1, h2, p { margin: 0; }
 .portrait-item strong { font-size: 12px; line-height: 1.45; }
 .portrait-item span { margin-top: 4px; color: #56615c; font-size: 11px; line-height: 1.5; }
 .portrait-item small { margin-top: 5px; color: var(--muted); font-size: 10px; }
+.portrait-item-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.portrait-item-actions button { min-height: 30px; padding: 5px 9px; font-size: 10px; }
 .portrait-list-empty { color: var(--muted); font-size: 12px; }
 .source-list .portrait-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; }
 .source-list .portrait-item small { grid-column: 1 / -1; margin-top: 0; }
@@ -426,8 +431,9 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .context-section { border-right: 0; }
   .tab { min-width: 96px; }
   .portrait-toolbar { align-items: stretch; flex-direction: column; padding: 14px 16px; }
-  .portrait-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-  .portrait-actions .field { min-width: 0; }
+  .portrait-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .portrait-actions .field { grid-column: 1 / -1; min-width: 0; }
+  .portrait-actions > button { width: 100%; padding-inline: 6px; }
   .portrait-identity { padding: 20px 16px; }
   .portrait-heading { display: grid; gap: 16px; }
   .portrait-title-row h2 { font-size: 21px; }
@@ -459,7 +465,7 @@ dialog p { color: var(--muted); line-height: 1.5; }
 export const UI_JS = String.raw`(function () {
   "use strict";
   var state = {
-    projects: [], memories: [], scope: "all", selectedId: null, portraitProjectId: null,
+    projects: [], memories: [], scope: "all", selectedId: null, portraitProjectId: null, portrait: null,
     graphCy: null, graphProjectId: null, graphRoot: null, graphScope: "files",
     graphSelectedId: null, graphSearchResults: [], graphSearchSequence: 0, graphSearchTimer: null
   };
@@ -495,9 +501,9 @@ export const UI_JS = String.raw`(function () {
       "editor-panel", "editor-close",
       "context-project", "context-task", "context-budget", "preview-context", "context-results",
       "context-summary", "empty-context",
-      "portrait-project", "refresh-portrait", "portrait-loading", "portrait-empty", "portrait-content",
+      "portrait-project", "index-project", "toggle-watch", "refresh-portrait", "portrait-loading", "portrait-empty", "portrait-content",
       "portrait-name", "portrait-state", "portrait-path", "portrait-index-state", "portrait-metrics",
-      "portrait-file-types", "portrait-git", "portrait-knowledge", "portrait-tasks", "portrait-memories",
+      "portrait-file-types", "portrait-git", "portrait-knowledge", "portrait-tasks", "portrait-memories", "portrait-stale-memories",
       "portrait-sources", "portrait-candidates", "portrait-overview", "portrait-graph",
       "graph-search-form", "graph-search", "graph-search-results", "graph-relations", "graph-layout",
       "graph-fit", "graph-relayout", "graph-loading", "graph-empty", "code-graph", "graph-details",
@@ -523,6 +529,8 @@ export const UI_JS = String.raw`(function () {
     els["reactivate-rule"].addEventListener("click", function () { updateSelectedStatus("active"); });
     els["preview-context"].addEventListener("click", previewContext);
     els["portrait-project"].addEventListener("change", function () { resetGraph(); loadPortrait(true); });
+    els["index-project"].addEventListener("click", indexSelectedProject);
+    els["toggle-watch"].addEventListener("click", toggleSelectedWatch);
     els["refresh-portrait"].addEventListener("click", function () { loadPortrait(true); });
     document.querySelectorAll(".portrait-mode").forEach(function (button) {
       button.addEventListener("click", function () { setPortraitMode(button.dataset.portraitMode); });
@@ -780,6 +788,7 @@ export const UI_JS = String.raw`(function () {
     try {
       var portrait = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/portrait");
       renderPortrait(portrait);
+      state.portrait = portrait;
       state.portraitProjectId = projectId;
     } catch (error) {
       els["portrait-loading"].replaceChildren(errorState(error.message || "无法读取项目画像"));
@@ -799,6 +808,7 @@ export const UI_JS = String.raw`(function () {
     els["portrait-path"].textContent = project.rootPath;
     els["portrait-state"].textContent = project.archivedAt ? "已归档" : "活跃";
     els["portrait-state"].className = "status-badge " + (project.archivedAt ? "inactive" : "active");
+    els["toggle-watch"].textContent = portrait.watch ? "停止监听" : "启动监听";
     els["portrait-index-state"].replaceChildren(
       element("strong", "", lastRun ? indexRunLabel(lastRun.status) : "尚未建立索引"),
       element("span", "", lastRun ? "最近索引 " + formatDate(lastRun.completed_at || lastRun.started_at) : "项目已登记，等待首次索引")
@@ -813,16 +823,34 @@ export const UI_JS = String.raw`(function () {
     renderGit(portrait);
     renderStatusGroups(portrait.statuses);
     renderPortraitList(els["portrait-tasks"], portrait.activeTasks, "当前没有进行中的任务", function (item) {
-      return { title: item.goal, content: item.checkpoint.summary || "尚未保存任务摘要", meta: "更新于 " + formatDate(item.updatedAt) };
+      return {
+        title: item.goal, content: item.checkpoint.summary || "尚未保存任务摘要", meta: "更新于 " + formatDate(item.updatedAt),
+        actions: [
+          { label: "标记完成", className: "secondary-button", action: function () { updateTask(item.id, "complete"); } },
+          { label: "取消任务", className: "danger-button", action: function () { updateTask(item.id, "cancel"); } }
+        ]
+      };
     });
     renderPortraitList(els["portrait-memories"], portrait.recentMemories, "当前没有活跃项目记忆", function (item) {
       return { title: item.title, content: item.content, meta: typeLabel(item.type) + " · " + formatDate(item.updatedAt) };
+    });
+    renderPortraitList(els["portrait-stale-memories"], portrait.staleMemories, "没有待处理的过期记忆", function (item) {
+      return {
+        title: item.title, content: item.content, meta: statusLabel(item.status) + " · " + (item.sourceRef || "无来源"),
+        actions: [{ label: "标记删除", className: "danger-button", action: function () { deleteStaleMemory(item.id); } }]
+      };
     });
     renderPortraitList(els["portrait-sources"], portrait.primarySources, "当前没有已索引来源", function (item) {
       return { title: item.path, content: formatBytes(item.sizeBytes), meta: "索引于 " + formatDate(item.indexedAt) };
     });
     renderPortraitList(els["portrait-candidates"], portrait.pendingCandidates, "没有待审核候选", function (item) {
-      return { title: item.title, content: item.content, meta: item.sourceKind + " · 置信度 " + Math.round(item.confidence * 100) + "%" };
+      return {
+        title: item.title, content: item.content, meta: item.sourceKind + " · 置信度 " + Math.round(item.confidence * 100) + "%",
+        actions: [
+          { label: "接受", className: "secondary-button", action: function () { reviewCandidate(item.id, "accept"); } },
+          { label: "拒绝", className: "danger-button", action: function () { reviewCandidate(item.id, "reject"); } }
+        ]
+      };
     });
   }
 
@@ -881,8 +909,64 @@ export const UI_JS = String.raw`(function () {
     items.forEach(function (item) {
       var value = map(item); var row = element("article", "portrait-item");
       row.append(element("strong", "", value.title), element("span", "", value.content), element("small", "", value.meta));
+      if (value.actions && value.actions.length) {
+        var actions = element("div", "portrait-item-actions");
+        value.actions.forEach(function (action) {
+          var button = element("button", action.className || "secondary-button", action.label);
+          button.type = "button";
+          button.addEventListener("click", action.action);
+          actions.append(button);
+        });
+        row.append(actions);
+      }
       container.append(row);
     });
+  }
+
+  async function indexSelectedProject() {
+    var projectId = els["portrait-project"].value;
+    if (!projectId) return;
+    await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/index", { method: "POST", body: {} }, "项目索引已更新", els["index-project"]);
+  }
+
+  async function toggleSelectedWatch() {
+    var projectId = els["portrait-project"].value;
+    if (!projectId) return;
+    var active = Boolean(state.portrait && state.portrait.project.id === projectId && state.portrait.watch);
+    await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/watch", active
+      ? { method: "DELETE" }
+      : { method: "POST", body: { debounceMs: 1000 } }, active ? "文件监听已停止" : "文件监听已启动", els["toggle-watch"]);
+  }
+
+  async function reviewCandidate(candidateId, action) {
+    var projectId = els["portrait-project"].value;
+    await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/candidates/" + encodeURIComponent(candidateId) + "/" + action,
+      { method: "POST", body: {} }, action === "accept" ? "候选已接受" : "候选已拒绝");
+  }
+
+  async function deleteStaleMemory(memoryId) {
+    var projectId = els["portrait-project"].value;
+    await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/memories/" + encodeURIComponent(memoryId) + "/status",
+      { method: "PATCH", body: { status: "deleted" } }, "过期记忆已标记删除");
+  }
+
+  async function updateTask(taskId, action) {
+    var projectId = els["portrait-project"].value;
+    await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/tasks/" + encodeURIComponent(taskId) + "/" + action,
+      { method: "POST", body: {} }, action === "complete" ? "任务已完成" : "任务已取消");
+  }
+
+  async function mutatePortrait(path, options, success, control) {
+    if (control) control.disabled = true;
+    try {
+      await fetchJson(path, options);
+      await loadPortrait(true);
+      toast(success);
+    } catch (error) {
+      toast(error.message || String(error), true);
+    } finally {
+      if (control) control.disabled = false;
+    }
   }
 
   function setPortraitMode(mode) {

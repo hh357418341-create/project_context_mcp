@@ -4,7 +4,7 @@
 
 Project Context MCP is a local-first, cross-session project intelligence and memory server for coding agents. It incrementally indexes project text and code, stores sourced decisions and constraints, persists task checkpoints, and assembles task-focused context through MCP.
 
-## Personal Storage Capabilities (v0.6.1)
+## Personal Storage Capabilities (v0.7.0)
 
 - User-selected persistent storage; no silent MCP-side initialization
 - Project registry shared across Codex, Claude Code, Cursor, and other MCP clients
@@ -27,6 +27,7 @@ Project Context MCP is a local-first, cross-session project intelligence and mem
 - Structured memory types and lifecycle states, including superseding decisions
 - Native user memories with `user`, `workspace`, `project`, `module`, and `task` scopes
 - Cross-session tasks and checkpoints
+- Local-workbench actions for candidate review, stale-memory cleanup, task completion/cancellation, indexing, and watcher control
 - Task-ranked `project_context` assembly with related code symbols and a strictly enforced token budget
 - Task-relevant scoped constraints while retaining project-wide constraints with an empty scope
 - Deterministic local quality evaluation for retrieval, context selection, memory candidates, and latency
@@ -124,6 +125,9 @@ node dist/cli.js search <project-id> "refresh token"
 node dist/cli.js memory candidates <project-id>
 node dist/cli.js memory accept <project-id> <candidate-id>
 
+# Cancel obsolete cross-session work while retaining its latest checkpoint
+node dist/cli.js task cancel <project-id> <task-id>
+
 # Store a sourced decision
 node dist/cli.js memory add <project-id> `
   --type decision `
@@ -173,8 +177,9 @@ in-progress tasks, or pending candidates remain. A missing project directory nev
 
 `project-context ui` starts an ephemeral HTTP server bound only to `127.0.0.1`, chooses an available port,
 and opens the system browser. Its project portrait summarizes indexing health, code intelligence, file types,
-Git state, memories, candidates, tasks, and primary indexed sources. The UI also manages `user`, `workspace`,
-`project`, `module`, and `task` scoped rules.
+Git state, memories, candidates, tasks, and primary indexed sources. It can run incremental indexing, control
+the process-lifetime watcher, review candidates, clean up stale memories, and close historical tasks. The UI
+also manages `user`, `workspace`, `project`, `module`, and `task` scoped rules.
 
 The portrait includes an interactive Cytoscape.js relationship graph. Its file-level view aggregates project
 dependencies without sending every raw relation to the browser; selecting or searching a file or symbol can
@@ -307,7 +312,7 @@ Codex makes the MCP server available from global configuration and follows `AGEN
 
 For the scope of Codex global configuration and `AGENTS.md`, see the official OpenAI documentation for [MCP](https://developers.openai.com/codex/mcp/) and [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/).
 
-## MCP Tools (34)
+## MCP Tools (35)
 
 - `storage_status`
 - `project_open`, `project_list`, `project_update`, `project_archive`, `project_unarchive`, `project_relocate`
@@ -318,7 +323,7 @@ For the scope of Codex global configuration and `AGENTS.md`, see the official Op
 - `memory_remember`, `memory_list`, `memory_update_status`
 - `memory_candidates`, `memory_candidate_accept`, `memory_candidate_reject`
 - `user_memory_remember`, `user_memory_list`, `user_memory_update_status`
-- `task_start`, `task_checkpoint`, `task_list`, `task_complete`
+- `task_start`, `task_checkpoint`, `task_list`, `task_complete`, `task_cancel`
 
 `project_index` returns symbol/relation totals, stale memory IDs, newly generated candidates, and Git metadata. Git evidence is preferred when available; projects without Git can still generate candidates from added or changed indexed knowledge documents. Completing a task can generate bounded candidates from its summary, risks, and explicitly durable completed items. It never returns or stores the full diff. Candidate memories remain review-only until `memory_candidate_accept` is called.
 

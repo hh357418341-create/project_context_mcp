@@ -57,7 +57,7 @@ describe("Project Context MCP", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(34);
+      expect(tools.tools).toHaveLength(35);
       expect(tools.tools.every((tool) => tool.outputSchema !== undefined)).toBe(true);
 
       await call(client, "storage_status", {});
@@ -99,6 +99,8 @@ describe("Project Context MCP", () => {
       });
       await call(client, "task_list", { projectId, status: "in_progress" });
       await call(client, "task_complete", { projectId, taskId });
+      const cancelled = await call(client, "task_start", { projectId, goal: "Cancel obsolete MCP work" });
+      await call(client, "task_cancel", { projectId, taskId: object(cancelled).id });
       await call(client, "project_health", { projectId });
       await call(client, "project_doctor", { projectId, repair: false });
       const backup = join(tempRoot, "backup", "project.db");
@@ -159,7 +161,7 @@ describe("Project Context MCP", () => {
     const client = new Client({ name: "stdio-test", version: "1.0.0" });
     try {
       await client.connect(transport);
-      expect((await client.listTools()).tools).toHaveLength(34);
+      expect((await client.listTools()).tools).toHaveLength(35);
       const status = await client.callTool({ name: "storage_status", arguments: {} });
       expect(status.structuredContent).toMatchObject({ result: { configured: true } });
     } finally {
