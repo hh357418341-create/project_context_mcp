@@ -3,7 +3,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { pathToFileURL } from "node:url";
-import { ProjectContextApp } from "../core/app.js";
+import { ProjectContextApp, stopAllProjectWatches } from "../core/app.js";
 import { loadGlobalConfig } from "../config/paths.js";
 import { ProjectContextError, errorMessage } from "../shared/errors.js";
 import { memoryStatusSchema, memoryTypeSchema } from "../memory/memory-service.js";
@@ -25,7 +25,7 @@ const checkpointSchema = {
 const outputSchema = { result: z.unknown() };
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "project-context-mcp", version: "0.7.0" });
+  const server = new McpServer({ name: "project-context-mcp", version: "0.8.0" });
 
   server.registerTool("storage_status", {
     description: "Check whether persistent Project Context storage has been configured.",
@@ -44,11 +44,28 @@ export function createMcpServer(): McpServer {
   });
 
   server.registerTool("project_open", {
-    description: "Register or reopen a project from its absolute root path.",
+    description: "Open a project, synchronize its index, and start managed process-lifetime change tracking.",
     outputSchema,
     inputSchema: { root: z.string().min(1) },
     annotations: { idempotentHint: true },
-  }, ({ root }) => withApp((app) => app.openProject(root)));
+  }, ({ root }, extra) => withApp(async (app) => {
+    const project = await app.openProject(root);
+    const managedIndex = await app.index(project.id, {
+      signal: extra.signal,
+      ...((extra._meta?.progressToken !== undefined) ? {
+        onProgress: (progress) => extra.sendNotification({
+          method: "notifications/progress",
+          params: {
+            progressToken: extra._meta!.progressToken!,
+            progress: progress.visited,
+            message: `${progress.phase}: ${progress.path ?? `${progress.indexed} files indexed`}`,
+          },
+        }),
+      } : {}),
+    });
+    const watch = app.watchStart(project.id, 1_000, false);
+    return { ...project, managedIndex, watch };
+  }));
 
   server.registerTool("project_list", {
     description: "List projects already registered in persistent storage.",
@@ -195,7 +212,10 @@ export function createMcpServer(): McpServer {
       limit: z.number().int().min(1).max(100).default(20),
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
-  }, ({ projectId, query, limit }) => withApp((app) => app.search(projectId, query, limit)));
+  }, ({ projectId, query, limit }) => withApp(async (app) => {
+    await app.watchFlush(projectId);
+    return app.search(projectId, query, limit);
+  }));
 
   server.registerTool("project_context", {
     description: "Assemble task-focused project context from active memories, task checkpoints, and indexed sources.",
@@ -206,7 +226,10 @@ export function createMcpServer(): McpServer {
       budgetTokens: z.number().int().min(500).max(100_000).default(8_000),
     },
     annotations: { readOnlyHint: true, idempotentHint: true },
-  }, ({ projectId, task, budgetTokens }) => withApp((app) => app.context(projectId, task, budgetTokens)));
+  }, ({ projectId, task, budgetTokens }) => withApp(async (app) => {
+    await app.watchFlush(projectId);
+    return app.context(projectId, task, budgetTokens);
+  }));
 
   server.registerTool("memory_remember", {
     description: "Persist a sourced fact, decision, constraint, preference, lesson, issue, assumption, or task summary.",
@@ -369,18 +392,24 @@ export function createMcpServer(): McpServer {
   }, ({ projectId, status, limit }) => withApp((app) => app.tasks(projectId, status, limit)));
 
   server.registerTool("task_complete", {
-    description: "Mark a persistent task completed while retaining its latest checkpoint.",
+    description: "Flush managed project changes, then complete a persistent task while retaining its checkpoint.",
     outputSchema,
     inputSchema: { projectId: z.string().min(1), taskId: z.string().min(1) },
     annotations: { idempotentHint: true },
-  }, ({ projectId, taskId }) => withApp((app) => app.completeTask(projectId, taskId)));
+  }, ({ projectId, taskId }) => withApp(async (app) => {
+    await app.watchFlush(projectId);
+    return app.completeTask(projectId, taskId);
+  }));
 
   server.registerTool("task_cancel", {
-    description: "Cancel an in-progress persistent task while retaining its latest checkpoint.",
+    description: "Flush managed project changes, then cancel an in-progress task while retaining its checkpoint.",
     outputSchema,
     inputSchema: { projectId: z.string().min(1), taskId: z.string().min(1) },
     annotations: { destructiveHint: true, idempotentHint: true },
-  }, ({ projectId, taskId }) => withApp((app) => app.cancelTask(projectId, taskId)));
+  }, ({ projectId, taskId }) => withApp(async (app) => {
+    await app.watchFlush(projectId);
+    return app.cancelTask(projectId, taskId);
+  }));
 
   server.registerTool("project_health", {
     description: "Report source, chunk, memory, task, and latest index-run health for a project.",
@@ -425,6 +454,7 @@ export function createMcpServer(): McpServer {
 
   registerResources(server);
   registerPrompts(server);
+  server.server.onclose = stopAllProjectWatches;
   return server;
 }
 

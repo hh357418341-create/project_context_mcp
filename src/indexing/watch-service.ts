@@ -1,5 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
+import ignore, { type Ignore } from "ignore";
 import { ProjectContextError } from "../shared/errors.js";
+import { defaultIgnorePatterns, isSensitivePath } from "./file-policy.js";
 
 export interface ProjectWatchStatus {
   projectId: string;
@@ -17,6 +19,10 @@ interface WatchEntry extends ProjectWatchStatus {
   watcher: FSWatcher;
   timer: NodeJS.Timeout | null;
   dirty: boolean;
+  run: Promise<void> | null;
+  matcher: Ignore;
+  changeVersion: number;
+  indexedVersion: number;
 }
 
 export class ProjectWatchService {
@@ -33,9 +39,12 @@ export class ProjectWatchService {
 
     let entry: WatchEntry;
     try {
-      const watcher = watch(rootPath, { recursive: true }, () => {
+      const matcher = ignore().add(defaultIgnorePatterns(rootPath));
+      const watcher = watch(rootPath, { recursive: true }, (_eventType, filename) => {
+        if (filename && ignoredWatchPath(matcher, filename.toString())) return;
         entry.lastEventAt = new Date().toISOString();
         entry.dirty = true;
+        entry.changeVersion += 1;
         this.schedule(entry);
       });
       entry = {
@@ -51,6 +60,10 @@ export class ProjectWatchService {
         watcher,
         timer: null,
         dirty: initialIndex,
+        run: null,
+        matcher,
+        changeVersion: initialIndex ? 1 : 0,
+        indexedVersion: 0,
       };
       watcher.on("error", (error) => {
         entry.lastError = { code: "WATCH_ERROR", message: error.message, at: new Date().toISOString() };
@@ -79,6 +92,30 @@ export class ProjectWatchService {
     return [...this.entries.values()].map(publicStatus);
   }
 
+  async flushPending(projectId: string): Promise<ProjectWatchStatus | null> {
+    let entry = this.entries.get(projectId);
+    const targetVersion = entry?.changeVersion ?? 0;
+    while (entry && entry.indexedVersion < targetVersion) {
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = null;
+      }
+      entry.pending = false;
+      if (entry.run) {
+        await entry.run;
+      } else if (entry.dirty) {
+        await this.flush(entry);
+      } else {
+        break;
+      }
+      entry = this.entries.get(projectId);
+      if (entry?.lastError && entry.indexedVersion < targetVersion) {
+        throw new ProjectContextError(entry.lastError.code, entry.lastError.message);
+      }
+    }
+    return entry ? publicStatus(entry) : null;
+  }
+
   stopAll(): void {
     for (const projectId of [...this.entries.keys()]) this.stop(projectId);
   }
@@ -88,37 +125,47 @@ export class ProjectWatchService {
     entry.pending = true;
     entry.timer = setTimeout(() => {
       entry.timer = null;
-      void this.flush(entry);
+      void this.flushPending(entry.projectId).catch(() => undefined);
     }, delay);
   }
 
   private async flush(entry: WatchEntry): Promise<void> {
     if (!this.entries.has(entry.projectId)) return;
-    if (entry.indexing) {
-      entry.dirty = true;
-      this.schedule(entry);
-      return;
-    }
     entry.pending = false;
     entry.dirty = false;
     entry.indexing = true;
-    try {
-      await this.runIndex(entry.projectId);
-      entry.lastIndexAt = new Date().toISOString();
-      entry.lastError = null;
-    } catch (error) {
-      const code = error instanceof ProjectContextError ? error.code : "INDEX_FAILED";
-      entry.lastError = {
-        code,
-        message: error instanceof Error ? error.message : String(error),
-        at: new Date().toISOString(),
-      };
-      if (code === "INDEX_ALREADY_RUNNING") entry.dirty = true;
-    } finally {
-      entry.indexing = false;
-      if (entry.dirty && this.entries.has(entry.projectId)) this.schedule(entry);
-    }
+    const targetVersion = entry.changeVersion;
+    entry.run = (async () => {
+      try {
+        await this.runIndex(entry.projectId);
+        entry.indexedVersion = Math.max(entry.indexedVersion, targetVersion);
+        entry.lastIndexAt = new Date().toISOString();
+        entry.lastError = null;
+      } catch (error) {
+        const code = error instanceof ProjectContextError ? error.code : "INDEX_FAILED";
+        entry.lastError = {
+          code,
+          message: error instanceof Error ? error.message : String(error),
+          at: new Date().toISOString(),
+        };
+        entry.dirty = true;
+      } finally {
+        entry.indexing = false;
+        entry.run = null;
+        entry.dirty ||= entry.indexedVersion < entry.changeVersion;
+        if (entry.dirty && this.entries.has(entry.projectId)) this.schedule(entry);
+      }
+    })();
+    await entry.run;
   }
+}
+
+function ignoredWatchPath(matcher: Ignore, filename: string): boolean {
+  const relativePath = filename.replaceAll("\\", "/").replace(/^\.\//, "");
+  if (!relativePath || relativePath.startsWith("../")) return false;
+  return matcher.ignores(relativePath)
+    || matcher.ignores(`${relativePath.replace(/\/$/, "")}/`)
+    || isSensitivePath(relativePath);
 }
 
 function publicStatus(entry: WatchEntry): ProjectWatchStatus {

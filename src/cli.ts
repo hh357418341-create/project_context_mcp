@@ -14,7 +14,7 @@ import { startUiServer } from "./ui/server.js";
 const program = new Command()
   .name("project-context")
   .description("Cross-session project intelligence and memory")
-  .version("0.7.0")
+  .version("0.8.0")
   .showHelpAfterError();
 
 program.command("init")

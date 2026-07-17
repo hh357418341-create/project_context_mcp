@@ -145,6 +145,10 @@ export class ProjectContextApp {
     return projectWatches.list();
   }
 
+  watchFlush(projectId: string): Promise<ProjectWatchStatus | null> {
+    return projectWatches.flushPending(projectId);
+  }
+
   rememberUser(input: {
     type: z.infer<typeof memoryTypeSchema>;
     title: string;
@@ -498,6 +502,10 @@ const projectWatches = new ProjectWatchService(async (projectId) => {
     app.close();
   }
 });
+
+export function stopAllProjectWatches(): void {
+  projectWatches.stopAll();
+}
 
 function scalar(db: SqliteDatabase, sql: string): number {
   return (db.prepare(sql).pluck().get() as number | undefined) ?? 0;

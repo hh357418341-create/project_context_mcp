@@ -4,7 +4,7 @@
 
 Project Context MCP is a local-first, cross-session project intelligence and memory server for coding agents. It incrementally indexes project text and code, stores sourced decisions and constraints, persists task checkpoints, and assembles task-focused context through MCP.
 
-## Personal Storage Capabilities (v0.7.0)
+## Personal Storage Capabilities (v0.8.0)
 
 - User-selected persistent storage; no silent MCP-side initialization
 - Project registry shared across Codex, Claude Code, Cursor, and other MCP clients
@@ -36,7 +36,7 @@ Project Context MCP is a local-first, cross-session project intelligence and mem
 - Versioned in-place database migrations, integrity diagnosis, FTS repair, backup, and JSONL export
 - Validated restore into a new project or an explicitly confirmed archived project
 - Project rename, archive, unarchive, relocation, previewed deletion, and guarded purge
-- Process-lifetime debounced file watchers that index changes without accepting candidates
+- MCP-managed initial synchronization and process-lifetime tracking with read and task-finalization flushes
 - Streaming AES-256-GCM encrypted backup and restore with scrypt-derived keys
 - Secure localhost project workspace with project portraits, scoped user rules, and assembled-context preview
 - CLI and stdio MCP server built on the same Core
@@ -201,7 +201,7 @@ body limit. The server sends a restrictive Content Security Policy and never lis
 
 ## Beginner Codex Setup: Load the MCP and Initialize Projects by Default
 
-“Default startup” has two layers: Codex loads the MCP server from its global configuration, and a global `AGENTS.md` tells Codex to open and index the current repository during the first user turn of a new session. Merely opening Codex without starting a turn does not scan disks in the background.
+“Default startup” has two layers: Codex loads the MCP server from its global configuration, and a global `AGENTS.md` tells Codex to open the current repository and request task context during the first user turn of a new session. `project_open` performs the initial or incremental index and starts change tracking inside MCP, so Codex does not need separate `project_index` or `project_watch_start` instructions. Merely opening Codex without starting a turn does not scan disks in the background.
 
 ### Step 1: Install and build
 
@@ -269,12 +269,10 @@ Use project-context-mcp to retain sourced project knowledge across Codex session
 
 ## Session Workflow
 1. At the beginning of the first user turn in a repository, call `storage_status`.
-2. Call `project_open` with the repository's absolute root path and reuse the returned project ID.
-3. Call `project_index` after opening the project. The first run creates the project database and performs a full index; later runs are incremental.
-4. Before substantial implementation work, call `project_context` with the current task.
-5. Use `project_search` for indexed text, symbols, memories, and code relationships instead of guessing.
-6. For non-trivial work, call `task_start`, save progress with `task_checkpoint`, and call `task_complete` when finished.
-7. Call `project_index` again after meaningful file changes.
+2. Call `project_open` with the repository's absolute root path and reuse the returned project ID. The MCP server synchronizes the index and manages change tracking for the current process.
+3. Before substantial implementation work, call `project_context` with the current task.
+4. Use `project_search` for indexed text, symbols, memories, and code relationships instead of guessing. Managed pending changes are flushed before reads.
+5. For non-trivial work, call `task_start`, save progress with `task_checkpoint`, and call `task_complete` when finished. Completion flushes pending project changes.
 
 ## Memory Rules
 - Review `memory_candidates` after indexing Git changes. Accept or reject candidates explicitly; never accept them automatically.
@@ -293,7 +291,6 @@ Open a repository under an allowed root that has not been registered before, sta
 ```text
 storage_status
 project_open
-project_index
 project_context
 ```
 
@@ -301,14 +298,14 @@ Expected results:
 
 - `project_open` returns a stable `prj_...` project ID;
 - `.project-context/project.db` appears in the repository;
-- the first `project_index` performs a full index and later sessions perform incremental indexes;
+- `project_open` completes the initial or incremental index and starts managed change tracking for the MCP process;
 - `project_context` returns memories, rules, task checkpoints, and indexed evidence relevant to the current task.
 
 Add `.project-context/` to the repository's `.gitignore`. If the repository is outside the roots allowed during storage initialization, `project_open` refuses to register it; rerun `init` and explicitly add the correct root.
 
-### Automatic loading is not a persistent background watcher
+### Managed indexing is not a permanent background service
 
-Codex makes the MCP server available from global configuration and follows `AGENTS.md` during the session's first task. A watcher created by `project_watch_start` exists only for the current MCP/CLI process and is not restored after Codex restarts. The normal workflow relies on incremental `project_index` calls at session start and after meaningful file changes.
+Codex makes the MCP server available from global configuration and follows `AGENTS.md` to call `project_open` during the session's first task. MCP completes an incremental index and starts a process-lifetime watcher for that project. `project_search`, `project_context`, `task_complete`, and `task_cancel` flush pending changes before continuing. Restarting Codex discards the old watcher, while the next `project_open` synchronizes and starts a new one. CLI workflows retain explicit `index` and `watch` controls.
 
 For the scope of Codex global configuration and `AGENTS.md`, see the official OpenAI documentation for [MCP](https://developers.openai.com/codex/mcp/) and [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/).
 
@@ -340,9 +337,11 @@ hash changes but the normalized source paragraph still exists, the binding refre
 range and remains active. A changed or missing paragraph becomes `stale`; legacy bindings without an excerpt
 retain conservative whole-file invalidation. Registry schema v2 adds project archival state and user memories.
 
-`project_watch_start` is controlled runtime automation: it lives only for the MCP or CLI process lifetime,
-debounces file events, runs the same incremental `project_index`, and reports its last run or error. It never
-accepts memory candidates. Watch state is not persisted, so restart it explicitly after a process restart.
+MCP `project_open` synchronizes the index and starts controlled change tracking automatically. Explicit
+`project_watch_start`, `project_watch_stop`, and `project_index` tools remain available for diagnostics and
+manual control. The watcher ignores internal databases, VCS metadata, dependencies, and common build output,
+debounces other events, and runs the same incremental index. It never accepts candidates and is released when
+the MCP connection closes.
 
 Encrypted backups use a versioned authenticated format with a random salt and IV, scrypt key derivation, and
 AES-256-GCM. MCP and CLI calls accept only an environment-variable name (`passphraseEnv`), never a raw

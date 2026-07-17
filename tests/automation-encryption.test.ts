@@ -47,10 +47,14 @@ describe("automatic indexing and encrypted backups", () => {
         "# Project\n\nDecision: automatic indexing must keep candidates review-only.\n",
         "utf8",
       );
-      await waitFor(() => app.watchList()[0]?.lastIndexAt !== null, 5_000);
+      await app.watchFlush(project.id);
       expect(app.search(project.id, "automatic indexing")).not.toHaveLength(0);
       expect(app.candidates(project.id, "pending").length).toBeGreaterThan(0);
       expect(app.memories(project.id, "active")).toHaveLength(0);
+      const lastEventAt = app.watchList()[0]?.lastEventAt;
+      await writeFile(join(projectRoot, ".project-context", "ignored.tmp"), "ignored", "utf8");
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(app.watchList()[0]?.lastEventAt).toBe(lastEventAt);
       app.archiveProject(project.id);
       await expect(app.deleteProject(project.id, { confirmProjectId: project.id, purge: true }))
         .rejects.toMatchObject({ code: "PROJECT_WATCH_ACTIVE" });
@@ -103,11 +107,3 @@ describe("automatic indexing and encrypted backups", () => {
     }
   });
 });
-
-async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for watcher index.");
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}

@@ -61,15 +61,28 @@ describe("Project Context MCP", () => {
       expect(tools.tools.every((tool) => tool.outputSchema !== undefined)).toBe(true);
 
       await call(client, "storage_status", {});
-      const opened = await call(client, "project_open", { root: projectRoot });
+      let sawManagedIndexProgress = false;
+      const openResult = await client.callTool({ name: "project_open", arguments: { root: projectRoot } }, undefined, {
+        onprogress: () => {
+          sawManagedIndexProgress = true;
+        },
+      });
+      const opened = object(openResult.structuredContent).result;
       const projectId = object(opened).id as string;
+      expect(sawManagedIndexProgress).toBe(true);
+      expect(object(object(opened).managedIndex).generatedCandidates).toHaveLength(2);
+      expect(object(opened).watch).toMatchObject({ projectId, pending: false });
+      await mkdir(join(projectRoot, "src"), { recursive: true });
+      await writeFile(join(projectRoot, "src", "managed.ts"), "export const managedRefresh = 'fresh managed search';\n", "utf8");
+      const managedSearch = array(await call(client, "project_search", { projectId, query: "fresh managed search" }));
+      expect(managedSearch).not.toHaveLength(0);
       await call(client, "project_list", {});
       await call(client, "project_update", { projectId, name: "MCP Project" });
       await call(client, "project_watch_start", { projectId, initialIndex: false, debounceMs: 100 });
       expect(array(await call(client, "project_watch_list", {}))).toHaveLength(1);
       await call(client, "project_watch_stop", { projectId });
       const indexed = await call(client, "project_index", { projectId });
-      expect(object(indexed).generatedCandidates).toHaveLength(2);
+      expect(object(indexed).errors).toHaveLength(0);
       await call(client, "project_search", { projectId, query: "memory local" });
       await call(client, "project_context", { projectId, task: "review local memory", budgetTokens: 1_000 });
 
@@ -98,9 +111,18 @@ describe("Project Context MCP", () => {
         changedFiles: [], verification: [], blockers: [], risks: [],
       });
       await call(client, "task_list", { projectId, status: "in_progress" });
+      await call(client, "project_watch_start", { projectId, initialIndex: false, debounceMs: 100 });
+      await writeFile(join(projectRoot, "src", "completion.ts"), "export const finalRefresh = 'task completion refresh';\n", "utf8");
       await call(client, "task_complete", { projectId, taskId });
+      const completionVerifier = await ProjectContextApp.create();
+      try {
+        expect(completionVerifier.search(projectId, "task completion refresh")).not.toHaveLength(0);
+      } finally {
+        completionVerifier.close();
+      }
       const cancelled = await call(client, "task_start", { projectId, goal: "Cancel obsolete MCP work" });
       await call(client, "task_cancel", { projectId, taskId: object(cancelled).id });
+      await call(client, "project_watch_stop", { projectId });
       await call(client, "project_health", { projectId });
       await call(client, "project_doctor", { projectId, repair: false });
       const backup = join(tempRoot, "backup", "project.db");
@@ -144,6 +166,12 @@ describe("Project Context MCP", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+    const verifier = await ProjectContextApp.create();
+    try {
+      expect(verifier.watchList()).toHaveLength(0);
+    } finally {
+      verifier.close();
     }
   });
 
