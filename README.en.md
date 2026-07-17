@@ -199,9 +199,11 @@ requests validate `Host`, same-origin state-changing requests, a custom UI heade
 body limit. The server sends a restrictive Content Security Policy and never listens on `0.0.0.0`. Use
 `project-context ui --no-open` only for automation; it prints the one-time launch URL to the terminal.
 
-## Beginner Codex Setup: Load the MCP and Initialize Projects by Default
+## Beginner Setup: Connect an MCP Client and Initialize Projects Automatically
 
-“Default startup” has two layers: Codex loads the MCP server from its global configuration, and a global `AGENTS.md` tells Codex to open the current repository and request task context during the first user turn of a new session. `project_open` performs the initial or incremental index and starts change tracking inside MCP, so Codex does not need separate `project_index` or `project_watch_start` instructions. Merely opening Codex without starting a turn does not scan disks in the background.
+Project Context MCP is not tied to one AI client. Codex, Claude Code, Cursor, and any other client that supports stdio MCP can connect to the same local project data.
+
+“Default startup” has two layers: register the MCP server in the client you use, then add a client-level global instruction that tells it to call `project_open` and `project_context` during the first task in a repository. `project_open` performs the initial or incremental index and starts change tracking inside MCP, so clients do not need separate `project_index` or `project_watch_start` instructions. Merely opening a client without starting a task does not scan disks in the background.
 
 ### Step 1: Install and build
 
@@ -232,7 +234,11 @@ node dist/cli.js init --storage user --allow-project-root "$HOME/code"
 
 Run this step only once. `--allow-project-root` defines the security boundary for projects that may be registered; add more absolute roots to the same command when needed. The MCP never silently chooses a storage directory.
 
-### Step 3: Add the global Codex MCP configuration
+### Step 3: Add the MCP to your client
+
+Configure only the clients you actually use.
+
+#### Codex
 
 Using the Codex CLI is recommended because it avoids hand-editing TOML:
 
@@ -252,12 +258,24 @@ args = ["D:/tools/project-context-mcp/dist/mcp/server.js"]
 
 If `node` is not on `PATH`, use the absolute path to the Node executable as `command`. Restart Codex or begin a new session after changing the configuration.
 
-### Step 4: Add a global Codex `AGENTS.md`
+#### Claude Code
 
-Create or edit:
+Use user scope to make the server available across the current user's Claude Code projects:
 
-- Windows: `%USERPROFILE%\.codex\AGENTS.md`
-- macOS/Linux: `~/.codex/AGENTS.md`
+```powershell
+claude mcp add --scope user project-context -- node D:/tools/project-context-mcp/dist/mcp/server.js
+claude mcp get project-context
+```
+
+For another stdio MCP client, set the command to `node` and the argument to the absolute path of the built `dist/mcp/server.js` file.
+
+### Step 4: Add a global client instruction
+
+Create or edit the file used by your client:
+
+- Codex: `%USERPROFILE%\.codex\AGENTS.md` on Windows or `~/.codex/AGENTS.md` on macOS/Linux;
+- Claude Code: `%USERPROFILE%\.claude\CLAUDE.md` on Windows or `~/.claude/CLAUDE.md` on macOS/Linux;
+- Cursor or another client: add the block to its global User Rules rather than only to one repository's local rules.
 
 Add the following startup rules. If the file already contains personal instructions, append this block instead of replacing the file.
 
@@ -265,7 +283,7 @@ Add the following startup rules. If the file already contains personal instructi
 <!-- project-context-mcp:start -->
 # Cross-session Project Context (project-context-mcp)
 
-Use project-context-mcp to retain sourced project knowledge across Codex sessions.
+Use project-context-mcp to retain sourced project knowledge across AI coding sessions.
 
 ## Session Workflow
 1. At the beginning of the first user turn in a repository, call `storage_status`.
@@ -282,11 +300,11 @@ Use project-context-mcp to retain sourced project knowledge across Codex session
 <!-- project-context-mcp:end -->
 ```
 
-The bootstrap workflow belongs in Codex's global `AGENTS.md`, not only in the Project Context workbench's global rules. Workbench rules are returned only after `project_context` has already been called, so they cannot bootstrap the first MCP calls.
+The bootstrap workflow belongs in a user-level global instruction that the client reads before starting a task, not only in the Project Context workbench's global rules. Workbench rules are returned only after `project_context` has already been called, so they cannot bootstrap the first MCP calls.
 
 ### Step 5: Verify first-project initialization
 
-Open a repository under an allowed root that has not been registered before, start Codex, and send the first normal task message. The global instructions should make Codex call:
+Open a repository under an allowed root that has not been registered before, start the configured MCP client, and send the first normal task message. The global instructions should make the client call:
 
 ```text
 storage_status
@@ -305,9 +323,9 @@ Add `.project-context/` to the repository's `.gitignore`. If the repository is o
 
 ### Managed indexing is not a permanent background service
 
-Codex makes the MCP server available from global configuration and follows `AGENTS.md` to call `project_open` during the session's first task. MCP completes an incremental index and starts a process-lifetime watcher for that project. `project_search`, `project_context`, `task_complete`, and `task_cancel` flush pending changes before continuing. Restarting Codex discards the old watcher, while the next `project_open` synchronizes and starts a new one. CLI workflows retain explicit `index` and `watch` controls.
+The client starts the server from its MCP configuration and follows its global instructions to call `project_open` during the session's first task. MCP completes an incremental index and starts a process-lifetime watcher for that project. `project_search`, `project_context`, `task_complete`, and `task_cancel` flush pending changes before continuing. Restarting the client or MCP process discards the old watcher, while the next `project_open` synchronizes and starts a new one. CLI workflows retain explicit `index` and `watch` controls.
 
-For the scope of Codex global configuration and `AGENTS.md`, see the official OpenAI documentation for [MCP](https://developers.openai.com/codex/mcp/) and [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/).
+For client-specific configuration, see the official Codex documentation for [MCP](https://developers.openai.com/codex/mcp/) and [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/), or the Claude Code [MCP](https://docs.anthropic.com/en/docs/claude-code/mcp) documentation.
 
 ## MCP Tools (35)
 

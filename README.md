@@ -171,26 +171,31 @@ node dist/cli.js project restore-encrypted D:\ProjectMemoryBackups\my-app.pcmb `
 
 浏览器会话使用随机启动令牌，并将其交换为 `HttpOnly`、`SameSite=Strict` Cookie。API 会校验 `Host`、同源状态变更请求、自定义 UI 请求头、JSON Schema 和 64 KiB 请求体上限。服务返回严格的内容安全策略，并且不会监听 `0.0.0.0`。`project-context ui --no-open` 仅供自动化使用，它会将一次性启动 URL 输出到终端。
 
-## Codex 小白教程：安装后默认加载并初始化项目
+## 小白教程：接入 MCP 客户端并自动初始化项目
 
-这里的“默认启动”分为两层：Codex 从全局配置加载 MCP 服务；全局 `AGENTS.md` 指示 Codex 在新会话的第一个用户回合打开当前项目并获取任务上下文。`project_open` 会在 MCP 内部完成首次或增量索引并启动变更监听，无需再要求 Codex 调用 `project_index` 或 `project_watch_start`。仅打开 Codex 而不开始对话时，不会在后台扫描磁盘。
+Project Context MCP 不绑定某一个 AI 客户端。Codex、Claude Code、Cursor 以及其他支持 stdio MCP 的客户端都可以连接同一套本地项目数据。
+
+这里的“默认启动”分为两层：先在所用客户端中注册 MCP 服务，再通过该客户端的全局会话规则，引导它在仓库首个任务中调用 `project_open` 和 `project_context`。`project_open` 会在 MCP 内部完成首次或增量索引并启动变更监听，无需客户端单独调用 `project_index` 或 `project_watch_start`。仅启动客户端但不开始任务时，不会在后台扫描磁盘。
 
 ### 安装完成后还要配置什么
 
-首次安装后需要完成下面 3 项一次性配置，缺少其中任何一项都可能导致 Codex 看得到 MCP、但没有真正打开和索引当前项目：
+首次安装后需要完成下面 3 项一次性配置，缺少其中任何一项都可能导致客户端看得到 MCP、但没有真正打开和索引当前项目：
 
 | 一次性配置 | 作用 | 完成标志 |
 | --- | --- | --- |
 | 初始化个人存储和允许的项目根目录 | 决定共享注册表、恢复目录和允许索引的代码目录 | `storage_status` 返回 `configured: true` |
-| 将 MCP 注册到 Codex 全局配置 | 让 Codex 可以启动 `project-context-mcp` | `codex mcp get project-context` 显示 `enabled: true` |
-| 将推荐区块追加到全局 `AGENTS.md` | 引导 Codex 在仓库首个任务中调用 `project_open` | 新会话依次调用 `storage_status`、`project_open`、`project_context` |
+| 将 MCP 注册到所用客户端 | 让 Codex、Claude Code 或其他客户端可以启动 `project-context-mcp` | 客户端的 MCP 列表中能看到 `project-context` |
+| 将推荐区块加入客户端全局会话规则 | 引导客户端在仓库首个任务中调用 `project_open` | 新会话依次调用 `storage_status`、`project_open`、`project_context` |
 
-全局 `AGENTS.md` 的位置：
+常用客户端的全局会话规则位置：
 
-- Windows：`%USERPROFILE%\.codex\AGENTS.md`
-- macOS/Linux：`~/.codex/AGENTS.md`
+| 客户端 | Windows | macOS/Linux |
+| --- | --- | --- |
+| Codex | `%USERPROFILE%\.codex\AGENTS.md` | `~/.codex/AGENTS.md` |
+| Claude Code | `%USERPROFILE%\.claude\CLAUDE.md` | `~/.claude/CLAUDE.md` |
+| Cursor 或其他 MCP 客户端 | 使用客户端提供的全局 MCP 配置和 User Rules | 使用客户端提供的全局 MCP 配置和 User Rules |
 
-这 3 项只需要配置一次。以后进入位于允许根目录下的任意仓库，直接向 Codex 描述正常开发任务即可，不需要修改项目提示词，也不需要手动调用 `project_index`、`project_watch_start` 或判断任务长短。MCP 会在 `project_open` 后托管当前进程的索引与 watcher；候选记忆仍需人工审核，不会自动进入正式上下文。
+这 3 项只需要为所用客户端配置一次。以后进入位于允许根目录下的任意仓库，直接描述正常开发任务即可，不需要修改项目提示词，也不需要手动调用 `project_index`、`project_watch_start` 或判断任务长短。MCP 会在 `project_open` 后托管当前进程的索引与 watcher；候选记忆仍需人工审核，不会自动进入正式上下文。
 
 下面按顺序给出从安装到验证的完整命令。已经完成某一步的用户可以直接跳到下一步。
 
@@ -223,7 +228,11 @@ node dist/cli.js init --storage user --allow-project-root "$HOME/code"
 
 这一步只需执行一次。`--allow-project-root` 是允许注册项目的安全边界；有多个代码目录时可以在同一条命令后继续列出其他绝对路径。MCP 不会静默选择存储目录。
 
-### 第 3 步：添加到 Codex 全局 MCP 配置
+### 第 3 步：添加到所用 MCP 客户端
+
+选择实际使用的客户端执行对应命令，不需要同时配置所有客户端。
+
+#### Codex
 
 推荐使用 Codex CLI，避免手写 TOML：
 
@@ -243,20 +252,32 @@ args = ["D:/tools/project-context-mcp/dist/mcp/server.js"]
 
 如果 `node` 不在 `PATH` 中，将 `command` 改为 Node 可执行文件的绝对路径。修改配置后，重启 Codex 或新建会话。
 
-### 第 4 步：添加 Codex 全局 `AGENTS.md`
+#### Claude Code
 
-创建或编辑：
+使用用户级 scope，配置会对当前用户的所有 Claude Code 项目生效：
 
-- Windows：`%USERPROFILE%\.codex\AGENTS.md`
-- macOS/Linux：`~/.codex/AGENTS.md`
+```powershell
+claude mcp add --scope user project-context -- node D:/tools/project-context-mcp/dist/mcp/server.js
+claude mcp get project-context
+```
 
-加入下面的启动规则。若文件中已有个人规则，只追加这段，不要覆盖原内容。这里修改的是 Codex 的全局规则，不是当前代码仓库里的 `AGENTS.md`。
+`claude mcp get project-context` 应能显示该 stdio 服务。其他支持 stdio MCP 的客户端，请将命令设置为 `node`，参数设置为构建产物 `dist/mcp/server.js` 的绝对路径。
+
+### 第 4 步：添加客户端全局会话规则
+
+根据所用客户端创建或编辑对应文件：
+
+- Codex：Windows 使用 `%USERPROFILE%\.codex\AGENTS.md`，macOS/Linux 使用 `~/.codex/AGENTS.md`；
+- Claude Code：Windows 使用 `%USERPROFILE%\.claude\CLAUDE.md`，macOS/Linux 使用 `~/.claude/CLAUDE.md`；
+- Cursor 或其他客户端：加入其全局 User Rules，不要只放在某一个项目的局部规则中。
+
+加入下面的启动规则。若文件中已有个人规则，只追加这段，不要覆盖原内容。这里修改的是客户端的用户级全局规则，不是当前代码仓库里的局部规则文件。
 
 ```markdown
 <!-- project-context-mcp:start -->
 # Cross-session Project Context (project-context-mcp)
 
-Use project-context-mcp to retain sourced project knowledge across Codex sessions.
+Use project-context-mcp to retain sourced project knowledge across AI coding sessions.
 
 ## Session Workflow
 1. At the beginning of the first user turn in a repository, call `storage_status`.
@@ -273,13 +294,13 @@ Use project-context-mcp to retain sourced project knowledge across Codex session
 <!-- project-context-mcp:end -->
 ```
 
-启动流程必须放在 Codex 的全局 `AGENTS.md`，不能只放在 Project Context 工作台的“全局规则”中。工作台规则只有在 `project_context` 已被调用后才能返回，无法负责引导第一次 MCP 调用。
+启动流程必须放在客户端启动任务前就能读取的用户级全局规则中，不能只放在 Project Context 工作台的“全局规则”中。工作台规则只有在 `project_context` 已被调用后才能返回，无法负责引导第一次 MCP 调用。
 
 完成这一步后，不需要为每个项目重复添加相同区块，也不需要在日常任务提示词中写“请启动 watcher”或“修改后重新索引”。
 
 ### 第 5 步：验证第一次自动初始化
 
-进入一个位于允许根目录下、尚未注册的仓库，然后启动 Codex 并发送第一条正常任务消息。按照上面的全局规则，Codex 应依次调用：
+进入一个位于允许根目录下、尚未注册的仓库，然后启动已经配置好的 MCP 客户端并发送第一条正常任务消息。按照上面的全局规则，客户端应依次调用：
 
 ```text
 storage_status
@@ -298,9 +319,9 @@ project_context
 
 ### MCP 托管索引不是永久后台服务
 
-Codex 会根据全局配置提供 MCP 服务，并根据 `AGENTS.md` 在会话首个任务中调用 `project_open`。MCP 会先完成增量索引，再为当前项目启动进程级 watcher；`project_search`、`project_context`、`task_complete` 和 `task_cancel` 会在执行前刷新待处理变化。Codex 重启后旧 watcher 不会恢复，但下一次 `project_open` 会重新同步并启动新的 watcher。CLI 仍保留显式的 `index` 和 `watch` 工作流。
+客户端会根据自身的 MCP 配置启动服务，并根据全局会话规则在首个任务中调用 `project_open`。MCP 会先完成增量索引，再为当前项目启动进程级 watcher；`project_search`、`project_context`、`task_complete` 和 `task_cancel` 会在执行前刷新待处理变化。客户端或 MCP 进程重启后旧 watcher 不会恢复，但下一次 `project_open` 会重新同步并启动新的 watcher。CLI 仍保留显式的 `index` 和 `watch` 工作流。
 
-Codex 全局配置和 `AGENTS.md` 的作用域可参考 OpenAI 官方文档：[MCP](https://developers.openai.com/codex/mcp/) 和 [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/)。
+客户端配置细节可参考对应官方文档：Codex 的 [MCP](https://developers.openai.com/codex/mcp/) 与 [Customization / AGENTS.md](https://developers.openai.com/codex/concepts/customization/)，以及 Claude Code 的 [MCP](https://docs.anthropic.com/en/docs/claude-code/mcp) 文档。
 
 ## MCP 工具（35 个）
 

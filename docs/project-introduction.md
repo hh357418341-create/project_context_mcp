@@ -670,7 +670,7 @@ node dist/cli.js search <project-id> "refresh token"
 node dist/cli.js context <project-id> "继续实现令牌重用检测"
 ```
 
-## Codex MCP 配置示例
+## MCP 客户端配置示例
 
 构建项目后，可在 Codex 配置中添加：
 
@@ -682,22 +682,32 @@ args = ["D:/project/project-context-mcp/dist/mcp/server.js"]
 
 存储需要先通过 CLI 明确初始化。MCP 服务不会在后台静默选择或创建持久化目录。
 
-### 推荐的 Codex 全局 `AGENTS.md`
+Claude Code 可以使用用户级 stdio 配置：
 
-MCP 负责索引和 watcher 的内部调度，但它不能主动感知 Codex 何时进入了某个仓库。需要用一段全局规则引导 Codex 在会话首个任务中调用 `project_open`：
+```powershell
+claude mcp add --scope user project-context -- node D:/project/project-context-mcp/dist/mcp/server.js
+claude mcp get project-context
+```
 
-首次安装后的最小配置闭环是：先用 CLI 初始化个人存储与允许的项目根目录，再把 MCP 注册到 Codex，最后追加下面的全局 `AGENTS.md` 区块。这三项只需配置一次；完成后，每个项目和每次普通开发任务都不需要重复修改提示词或手动调度索引。
+Cursor 和其他支持 stdio MCP 的客户端同样使用 `node` 作为命令，并把 `dist/mcp/server.js` 的绝对路径作为参数。
 
-- Windows：编辑 `%USERPROFILE%\.codex\AGENTS.md`；
-- macOS/Linux：编辑 `~/.codex/AGENTS.md`；
+### 推荐的客户端全局会话规则
+
+MCP 负责索引和 watcher 的内部调度，但它不能主动感知客户端何时进入了某个仓库。需要用一段全局规则引导客户端在会话首个任务中调用 `project_open`：
+
+首次安装后的最小配置闭环是：先用 CLI 初始化个人存储与允许的项目根目录，再把 MCP 注册到所用客户端，最后追加下面的客户端全局会话规则。这三项只需配置一次；完成后，每个项目和每次普通开发任务都不需要重复修改提示词或手动调度索引。
+
+- Codex：Windows 编辑 `%USERPROFILE%\.codex\AGENTS.md`，macOS/Linux 编辑 `~/.codex/AGENTS.md`；
+- Claude Code：Windows 编辑 `%USERPROFILE%\.claude\CLAUDE.md`，macOS/Linux 编辑 `~/.claude/CLAUDE.md`；
+- Cursor 或其他客户端：加入客户端的全局 User Rules；
 - 文件已有其他个人规则时，只追加下面的受管区块，不要覆盖原内容；
-- 这段启动规则不能只写进某个项目的 `AGENTS.md` 或 Project Context 工作台规则，否则新仓库和第一次 MCP 调用无法稳定覆盖。
+- 这段启动规则不能只写进某个项目的局部规则或 Project Context 工作台规则，否则新仓库和第一次 MCP 调用无法稳定覆盖。
 
 ```markdown
 <!-- project-context-mcp:start -->
 # Cross-session Project Context (project-context-mcp)
 
-Use project-context-mcp to retain sourced project knowledge across Codex sessions.
+Use project-context-mcp to retain sourced project knowledge across AI coding sessions.
 
 ## Session Workflow
 1. At the beginning of the first user turn in a repository, call `storage_status`.
