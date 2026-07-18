@@ -1,7 +1,9 @@
 import { watch, type FSWatcher } from "node:fs";
 import ignore, { type Ignore } from "ignore";
 import { ProjectContextError } from "../shared/errors.js";
-import { defaultIgnorePatterns, isSensitivePath } from "./file-policy.js";
+import { defaultIgnorePatterns, isCandidateTextFile, isSensitivePath } from "./file-policy.js";
+
+export const DEFAULT_WATCH_DEBOUNCE_MS = 300;
 
 export interface ProjectWatchStatus {
   projectId: string;
@@ -30,7 +32,7 @@ export class ProjectWatchService {
 
   constructor(private readonly runIndex: (projectId: string) => Promise<unknown>) {}
 
-  start(projectId: string, rootPath: string, debounceMs = 1_000, initialIndex = true): ProjectWatchStatus {
+  start(projectId: string, rootPath: string, debounceMs = DEFAULT_WATCH_DEBOUNCE_MS, initialIndex = true): ProjectWatchStatus {
     if (!Number.isInteger(debounceMs) || debounceMs < 100 || debounceMs > 60_000) {
       throw new ProjectContextError("INVALID_WATCH_DEBOUNCE", "Watch debounce must be between 100 and 60000 milliseconds.");
     }
@@ -165,7 +167,8 @@ function ignoredWatchPath(matcher: Ignore, filename: string): boolean {
   if (!relativePath || relativePath.startsWith("../")) return false;
   return matcher.ignores(relativePath)
     || matcher.ignores(`${relativePath.replace(/\/$/, "")}/`)
-    || isSensitivePath(relativePath);
+    || isSensitivePath(relativePath)
+    || !isCandidateTextFile(relativePath);
 }
 
 function publicStatus(entry: WatchEntry): ProjectWatchStatus {

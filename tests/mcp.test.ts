@@ -71,7 +71,7 @@ describe("Project Context MCP", () => {
       const projectId = object(opened).id as string;
       expect(sawManagedIndexProgress).toBe(true);
       expect(object(object(opened).managedIndex).generatedCandidates).toHaveLength(2);
-      expect(object(opened).watch).toMatchObject({ projectId, pending: false });
+      expect(object(opened).watch).toMatchObject({ projectId, debounceMs: 300, pending: false });
       await mkdir(join(projectRoot, "src"), { recursive: true });
       await writeFile(join(projectRoot, "src", "managed.ts"), "export const managedRefresh = 'fresh managed search';\n", "utf8");
       const managedSearch = array(await call(client, "project_search", { projectId, query: "fresh managed search" }));

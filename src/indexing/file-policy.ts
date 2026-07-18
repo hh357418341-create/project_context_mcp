@@ -8,18 +8,32 @@ export const DEFAULT_IGNORE_PATTERNS = [
   "node_modules/",
   "dist/",
   "build/",
+  "out/",
+  "target/",
+  "CMakeFiles/",
+  "cmake-build-*/",
   "coverage/",
+  "playwright-report/",
+  "test-results/",
+  ".playwright-cli/",
   ".next/",
   ".cache/",
+  ".gradle/",
   ".venv/",
   "venv/",
   "__pycache__/",
+  ".pytest_cache/",
+  ".mypy_cache/",
+  ".ruff_cache/",
+  ".tox/",
   "vendor/",
   "*.min.js",
   "*.min.css",
   "*.map",
   "*.lock",
   "package-lock.json",
+  ".ninja_deps",
+  ".ninja_log",
 ];
 
 const CODEX_RUNTIME_IGNORE_PATTERNS = [
@@ -72,6 +86,15 @@ const binaryExtensions = new Set([
   ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".7z",
   ".exe", ".dll", ".so", ".dylib", ".wasm", ".db", ".sqlite", ".sqlite3", ".woff", ".woff2",
 ]);
+const generatedArtifactExtensions = new Set([
+  // Native toolchains and coverage/profiling output.
+  ".o", ".obj", ".a", ".lib", ".lo", ".la", ".pdb", ".ilk", ".exp",
+  ".idb", ".iobj", ".ipdb", ".tlog", ".res", ".pch", ".gch", ".dwo", ".dwp",
+  ".bc", ".pcm", ".ifc", ".mod", ".smod",
+  ".gcda", ".gcno", ".profraw", ".profdata",
+  // Managed-language and compiler cache output.
+  ".class", ".jar", ".pyc", ".pyo", ".beam", ".hi", ".dyn_hi", ".dyn_o", ".rlib", ".rmeta",
+]);
 
 export function isSensitivePath(relativePath: string): boolean {
   const name = basename(relativePath).toLowerCase();
@@ -83,7 +106,15 @@ export function isSensitivePath(relativePath: string): boolean {
 }
 
 export function isCandidateTextFile(relativePath: string): boolean {
-  return !binaryExtensions.has(extname(relativePath).toLowerCase());
+  const extension = extname(relativePath).toLowerCase();
+  return !binaryExtensions.has(extension) && !generatedArtifactExtensions.has(extension);
+}
+
+export function isGeneratedTextArtifact(relativePath: string, content: string): boolean {
+  if (extname(relativePath).toLowerCase() !== ".d") return false;
+  // GCC/Clang dependency files normally begin with one or more object targets.
+  // Content inspection preserves real D-language source files that share the extension.
+  return /(?:^|\n)[^\r\n:]*\.(?:o|obj)\s*:\s*\S/im.test(content.slice(0, 16_384));
 }
 
 export function detectKind(relativePath: string): string {

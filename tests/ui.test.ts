@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ProjectContextApp } from "../src/core/app.js";
@@ -98,12 +98,52 @@ describe("localhost rule manager", () => {
     expect((portrait.body as { fileTypes: Array<{ extension: string; count: number }> }).fileTypes)
       .toEqual(expect.arrayContaining([expect.objectContaining({ extension: ".ts", count: 2 })]));
 
+    await writeFile(join(projectRoot, "src", "generated.ts"), "export const generated = true;\n", "utf8");
+    const indexedGenerated = await api(origin, `/api/projects/${project.id}/index`, { method: "POST", cookie, body: {} });
+    expect(indexedGenerated.body).toMatchObject({ errors: [] });
+    const initialIgnore = await api(origin, `/api/projects/${project.id}/ignore`, { cookie });
+    expect(initialIgnore.body).toEqual({ content: "" });
+    const previewIgnore = await api(origin, `/api/projects/${project.id}/ignore/preview`, {
+      method: "POST", cookie, body: { content: "src/generated.ts\n" },
+    });
+    expect(previewIgnore.response.status).toBe(200);
+    expect(previewIgnore.body).toMatchObject({ matchedCount: 1, totalIndexed: 4, samplePaths: ["src/generated.ts"] });
+    await expect(readFile(join(projectRoot, ".project-context-ignore"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    const invalidPreview = await api(origin, `/api/projects/${project.id}/ignore/preview`, {
+      method: "POST", cookie, body: { content: "src/generated.ts\n", unexpected: true },
+    });
+    expect(invalidPreview.response.status).toBe(400);
+    const savedIgnore = await api(origin, `/api/projects/${project.id}/ignore`, {
+      method: "PUT", cookie, body: { content: "src/generated.ts\r\n*.o\r\n*.a\r\n" },
+    });
+    expect(savedIgnore.response.status).toBe(200);
+    expect(savedIgnore.body).toMatchObject({
+      content: "src/generated.ts\n*.o\n*.a\n",
+      index: { removed: 1, errors: [] },
+    });
+    expect(await readFile(join(projectRoot, ".project-context-ignore"), "utf8"))
+      .toBe("src/generated.ts\n*.o\n*.a\n");
+    const invalidIgnore = await api(origin, `/api/projects/${project.id}/ignore`, {
+      method: "PUT", cookie, body: { content: "bad\0pattern" },
+    });
+    expect(invalidIgnore.response.status).toBe(400);
+    const unexpectedIgnoreField = await api(origin, `/api/projects/${project.id}/ignore`, {
+      method: "PUT", cookie, body: { content: "dist/\n", unexpected: true },
+    });
+    expect(unexpectedIgnoreField.response.status).toBe(400);
+    const oversizedIgnore = await api(origin, `/api/projects/${project.id}/ignore`, {
+      method: "PUT", cookie, body: { content: "x".repeat(60_001) },
+    });
+    expect(oversizedIgnore.response.status).toBe(400);
+    const missingProjectIgnore = await api(origin, "/api/projects/not-a-project/ignore", { cookie });
+    expect(missingProjectIgnore.response.status).toBe(404);
+
     const indexed = await api(origin, `/api/projects/${project.id}/index`, { method: "POST", cookie, body: {} });
     expect(indexed.body).toMatchObject({ errors: [] });
     const watchStarted = await api(origin, `/api/projects/${project.id}/watch`, {
-      method: "POST", cookie, body: { debounceMs: 100 },
+      method: "POST", cookie, body: {},
     });
-    expect(watchStarted.body).toMatchObject({ projectId: project.id, debounceMs: 100 });
+    expect(watchStarted.body).toMatchObject({ projectId: project.id, debounceMs: 300 });
     const watchedPortrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
     expect(watchedPortrait.body).toMatchObject({ watch: { projectId: project.id } });
     const watchStopped = await api(origin, `/api/projects/${project.id}/watch`, { method: "DELETE", cookie });
@@ -153,7 +193,7 @@ describe("localhost rule manager", () => {
     const graph = await api(origin, `/api/projects/${project.id}/graph?relation=CALLS&relation=IMPORTS`, { cookie });
     expect(graph.response.status).toBe(200);
     expect(graph.body).toMatchObject({ mode: "files", truncated: false });
-    expect((graph.body as { nodes: unknown[]; edges: unknown[] }).nodes).toHaveLength(3);
+    expect((graph.body as { nodes: unknown[]; edges: unknown[] }).nodes).toHaveLength(4);
     expect((graph.body as { edges: Array<{ relationType: string }> }).edges.map((edge) => edge.relationType))
       .toEqual(expect.arrayContaining(["CALLS", "IMPORTS"]));
 

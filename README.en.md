@@ -17,6 +17,7 @@ Project Context MCP is a local-first, cross-session project intelligence and mem
 - Root-aware pruning of Codex runtime sessions, caches, logs, attachments, and local secret stores
 - Indexed chunk foreign keys for predictable source cleanup on large existing databases
 - Default exclusion of `.env`, credentials, private keys, databases, binaries, generated folders, and large files
+- Default exclusion of `.d` dependency files, `.o/.obj` objects, `.a/.lib` static libraries, bytecode, compiler caches, and coverage/profiling artifacts
 - Tree-sitter symbol indexing for TypeScript, TSX, JavaScript, JSX, MJS, and CJS
 - Import, call, extends, and implements relationships included in search and task context
 - Automatic Git, Mercurial (hg), and Subversion (svn) detection with revision, branch, working-copy status, and diff-hash evidence without persisting full diffs
@@ -113,7 +114,7 @@ node dist/cli.js project open D:\project\my-app
 node dist/cli.js index <project-id>
 
 # Or keep an explicit process-lifetime watcher running
-node dist/cli.js watch <project-id> --debounce 1000
+node dist/cli.js watch <project-id> --debounce 300
 
 # Open the local rule manager in the system browser
 node dist/cli.js ui
@@ -178,8 +179,33 @@ in-progress tasks, or pending candidates remain. A missing project directory nev
 `project-context ui` starts an ephemeral HTTP server bound only to `127.0.0.1`, chooses an available port,
 and opens the system browser. Its project portrait summarizes indexing health, code intelligence, file types,
 Git state, memories, candidates, tasks, and primary indexed sources. It can run incremental indexing, control
-the process-lifetime watcher, review candidates, clean up stale memories, and close historical tasks. The UI
-also manages `user`, `workspace`, `project`, `module`, and `task` scoped rules.
+the process-lifetime watcher, review candidates, clean up stale memories, and close historical tasks. The index
+filter editor provides common-rule shortcuts, Windows-path normalization, and a read-only impact preview before
+atomically saving `.project-context-ignore` and immediately updating the index. The UI also manages `user`,
+`workspace`, `project`, `module`, and `task` scoped rules.
+
+### One-click startup on Windows
+
+Double-click [`start-web.cmd`](start-web.cmd) in the repository root to start the local workbench and open the
+system browser. The launcher resolves the project directory from its own location. If `dist/cli.js` does not
+exist yet, it builds the project using the installed dependencies; first-time setup still requires running
+`npm install` once in the repository.
+
+For a desktop entry, right-click `start-web.cmd` and choose **Send to > Desktop (create shortcut)**. Keep the
+command window open while using the workbench. Press `Ctrl+C` or close the window to stop the service. Do not
+bookmark a full URL from a previous launch: its port and launch token belong to that server process. Use the
+launcher again for each new session.
+
+### One-click startup on macOS
+
+Double-click [`start-web.command`](start-web.command) in the repository root to start the local workbench and
+open the default browser. The launcher recognizes the common Apple Silicon and Intel Homebrew Node.js paths
+and, like the Windows launcher, builds from the installed dependencies when `dist/cli.js` is missing.
+
+If the file is not executable, run `chmod +x start-web.command` once in Terminal. If macOS blocks the first
+launch, Control-click the file in Finder, choose **Open**, and confirm. Keep the Terminal window open while the
+workbench is running; press `Control+C` or close the window to stop the service. First-time setup still requires
+one `npm install` in the repository. Do not bookmark the temporary full URL from a launch.
 
 The portrait includes an interactive Cytoscape.js relationship graph. Its file-level view aggregates project
 dependencies without sending every raw relation to the browser; selecting or searching a file or symbol can
@@ -340,7 +366,7 @@ For client-specific configuration, see the official Codex documentation for [MCP
 - `user_memory_remember`, `user_memory_list`, `user_memory_update_status`
 - `task_start`, `task_checkpoint`, `task_list`, `task_complete`, `task_cancel`
 
-`project_index` returns symbol/relation totals, stale memory IDs, newly generated candidates, and Git metadata. Git evidence is preferred when available; projects without Git can still generate candidates from added or changed indexed knowledge documents. Completing a task can generate bounded candidates from its summary, risks, and explicitly durable completed items. It never returns or stores the full diff. Candidate memories remain review-only until `memory_candidate_accept` is called.
+`project_index` returns symbol/relation totals, stale memory IDs, newly generated candidates, and Git metadata. The indexer and watcher skip common cross-language compiler artifacts, including C/C++ `.d` dependency files, `.o/.obj` objects, `.a/.lib` static libraries, precompiled headers, Java/Python bytecode, and coverage or profiling output. Git evidence is preferred when available; projects without Git can still generate candidates from added or changed indexed knowledge documents. Completing a task can generate bounded candidates from its summary, risks, and explicitly durable completed items. It never returns or stores the full diff. Candidate memories remain review-only until `memory_candidate_accept` is called.
 
 Opening a database created before schema v4 only creates the n-gram table and returns immediately. Existing
 content is rebuilt in small committed batches during the next `project_index`, where MCP cancellation and

@@ -10,6 +10,7 @@ import {
   defaultIgnorePatterns,
   detectKind,
   isCandidateTextFile,
+  isGeneratedTextArtifact,
   isSensitivePath,
 } from "./file-policy.js";
 import { analyzeCode, type CodeAnalysis } from "../code-intelligence/tree-sitter-analyzer.js";
@@ -101,6 +102,11 @@ export async function indexProject(
           continue;
         }
         const content = buffer.toString("utf8");
+        if (isGeneratedTextArtifact(relativePath, content)) {
+          if (existingByPath.has(relativePath)) deleteSource(db, existingByPath.get(relativePath)!.id);
+          result.skipped += 1;
+          continue;
+        }
         if (containsLikelySecret(content)) {
           if (existingByPath.has(relativePath)) deleteSource(db, existingByPath.get(relativePath)!.id);
           result.skipped += 1;

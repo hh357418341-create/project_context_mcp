@@ -49,6 +49,32 @@ export const UI_HTML = String.raw`<!doctype html>
         </nav>
         <div id="portrait-overview" class="portrait-grid">
           <section class="portrait-section portrait-span-2"><header><div><span class="panel-label">CODEBASE</span><h2>代码构成</h2></div></header><div id="portrait-file-types" class="file-types"></div></section>
+          <section class="portrait-section portrait-span-2 ignore-section">
+            <header><div><span class="panel-label">INDEX FILTER</span><h2>索引过滤</h2></div><span id="ignore-status" class="subtle-status"></span></header>
+            <form id="ignore-form" class="ignore-form">
+              <div class="ignore-builder">
+                <div class="ignore-presets" aria-label="常用忽略规则">
+                  <span>快速添加</span>
+                  <button class="ignore-preset" data-ignore-preset="generated" type="button">生成代码</button>
+                  <button class="ignore-preset" data-ignore-preset="temporary" type="button">日志与临时文件</button>
+                  <button class="ignore-preset" data-ignore-preset="snapshots" type="button">测试快照</button>
+                </div>
+                <div class="ignore-path-row">
+                  <label class="sr-only" for="ignore-path">要排除的项目相对路径或扩展名</label>
+                  <input id="ignore-path" type="text" maxlength="500" spellcheck="false" placeholder="输入目录、文件或 *.ext">
+                  <button id="add-ignore-path" class="secondary-button" type="button">添加规则</button>
+                </div>
+              </div>
+              <label class="sr-only" for="ignore-content">项目忽略规则</label>
+              <textarea id="ignore-content" rows="8" maxlength="60000" spellcheck="false" placeholder="build/&#10;*.o&#10;*.a&#10;generated/**"></textarea>
+              <div id="ignore-path-warning" class="ignore-warning" hidden><span>检测到 Windows 路径分隔符</span><button id="normalize-ignore" type="button">转换为 /</button></div>
+              <div class="ignore-impact" aria-live="polite">
+                <strong id="ignore-impact-summary">输入规则后显示影响范围</strong>
+                <div id="ignore-impact-paths" class="ignore-impact-paths"></div>
+              </div>
+              <div class="ignore-actions"><button id="reload-ignore" class="secondary-button" type="button">重新载入</button><button id="save-ignore" class="primary-button" type="submit">保存并索引</button></div>
+            </form>
+          </section>
           <section class="portrait-section"><header><div><span class="panel-label">VERSION CONTROL</span><h2>版本控制状态</h2></div></header><dl id="portrait-git" class="portrait-facts"></dl></section>
           <section class="portrait-section"><header><div><span class="panel-label">KNOWLEDGE</span><h2>知识状态</h2></div></header><div id="portrait-knowledge" class="status-groups"></div></section>
           <section class="portrait-section"><header><div><span class="panel-label">ACTIVE WORK</span><h2>进行中的任务</h2></div></header><div id="portrait-tasks" class="portrait-list"></div></section>
@@ -304,6 +330,24 @@ h1, h2, p { margin: 0; }
 .portrait-section.portrait-span-2 { grid-column: 1 / -1; }
 .portrait-section > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .portrait-section h2 { font-size: 15px; }
+.ignore-section { min-height: 0; }
+.ignore-form { display: grid; gap: 10px; }
+.ignore-builder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); gap: 12px; align-items: center; }
+.ignore-presets { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.ignore-presets > span { margin-right: 3px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.ignore-preset { min-height: 30px; padding: 5px 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: #fff; color: #35413b; font-size: 12px; font-weight: 700; }
+.ignore-preset:hover { border-color: var(--accent); color: var(--accent-strong); }
+.ignore-path-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.ignore-path-row input { min-width: 0; }
+.ignore-form textarea { width: 100%; min-height: 152px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; line-height: 1.55; }
+.ignore-warning { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-left: 3px solid var(--amber); background: var(--amber-soft); color: #704405; font-size: 12px; }
+.ignore-warning button { border: 0; padding: 0; background: transparent; color: #704405; font-weight: 800; text-decoration: underline; }
+.ignore-impact { min-height: 48px; padding: 9px 11px; border: 1px solid var(--line); background: var(--surface-muted); color: var(--muted); font-size: 12px; }
+.ignore-impact strong { color: #35413b; }
+.ignore-impact-paths { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-top: 5px; }
+.ignore-impact-paths code { overflow-wrap: anywhere; }
+.ignore-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.subtle-status { color: var(--muted); font-size: 12px; }
 .file-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 34px; }
 .file-type { display: grid; grid-template-columns: minmax(70px, .6fr) minmax(120px, 1fr) auto; align-items: center; gap: 10px; min-height: 36px; border-top: 1px solid var(--line); font-size: 12px; }
 .file-type:nth-child(-n+2) { border-top: 0; }
@@ -443,6 +487,10 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .portrait-metric strong { font-size: 20px; }
   .portrait-grid { grid-template-columns: 1fr; border-left: 0; }
   .portrait-section, .portrait-section.portrait-span-2 { grid-column: auto; border-right: 0; padding: 20px 16px; }
+  .ignore-builder { grid-template-columns: 1fr; }
+  .ignore-presets { align-items: flex-start; }
+  .ignore-path-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .ignore-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .file-types { grid-template-columns: 1fr; }
   .file-type:nth-child(2) { border-top: 1px solid var(--line); }
   .portrait-mode-tabs { top: 142px; }
@@ -467,7 +515,8 @@ export const UI_JS = String.raw`(function () {
   var state = {
     projects: [], memories: [], scope: "all", selectedId: null, portraitProjectId: null, portrait: null,
     graphCy: null, graphProjectId: null, graphRoot: null, graphScope: "files",
-    graphSelectedId: null, graphSearchResults: [], graphSearchSequence: 0, graphSearchTimer: null
+    graphSelectedId: null, graphSearchResults: [], graphSearchSequence: 0, graphSearchTimer: null,
+    portraitLoading: false, ignoreProjectId: null
   };
   var scopes = [
     ["all", "全部规则"], ["user", "全局"], ["workspace", "工作区"],
@@ -487,6 +536,7 @@ export const UI_JS = String.raw`(function () {
       await refresh();
       newRule(false);
       await loadPortrait(false);
+      window.setInterval(refreshWatchedPortrait, 1500);
     } catch (error) {
       toast(error.message || String(error), true);
       document.getElementById("rule-list").replaceChildren(errorState("无法连接本地规则服务"));
@@ -505,6 +555,8 @@ export const UI_JS = String.raw`(function () {
       "portrait-name", "portrait-state", "portrait-path", "portrait-index-state", "portrait-metrics",
       "portrait-file-types", "portrait-git", "portrait-knowledge", "portrait-tasks", "portrait-memories", "portrait-stale-memories",
       "portrait-sources", "portrait-candidates", "portrait-overview", "portrait-graph",
+      "ignore-form", "ignore-content", "ignore-status", "reload-ignore", "save-ignore", "ignore-path", "add-ignore-path",
+      "ignore-path-warning", "normalize-ignore", "ignore-impact-summary", "ignore-impact-paths",
       "graph-search-form", "graph-search", "graph-search-results", "graph-relations", "graph-layout",
       "graph-fit", "graph-relayout", "graph-loading", "graph-empty", "code-graph", "graph-details",
       "graph-detail-title", "graph-detail-body", "graph-detail-close", "graph-expand-one", "graph-expand-two",
@@ -528,10 +580,24 @@ export const UI_JS = String.raw`(function () {
     });
     els["reactivate-rule"].addEventListener("click", function () { updateSelectedStatus("active"); });
     els["preview-context"].addEventListener("click", previewContext);
-    els["portrait-project"].addEventListener("change", function () { resetGraph(); loadPortrait(true); });
+    els["portrait-project"].addEventListener("change", function () { resetGraph(); state.ignoreProjectId = null; loadPortrait(true); });
     els["index-project"].addEventListener("click", indexSelectedProject);
     els["toggle-watch"].addEventListener("click", toggleSelectedWatch);
     els["refresh-portrait"].addEventListener("click", function () { loadPortrait(true); });
+    els["ignore-form"].addEventListener("submit", saveIgnoreRules);
+    els["reload-ignore"].addEventListener("click", function () { loadIgnoreRules(els["portrait-project"].value, false); });
+    els["ignore-content"].addEventListener("input", ignoreContentChanged);
+    els["add-ignore-path"].addEventListener("click", addIgnorePath);
+    els["ignore-path"].addEventListener("keydown", function (event) {
+      if (event.key === "Enter") { event.preventDefault(); addIgnorePath(); }
+    });
+    els["normalize-ignore"].addEventListener("click", function () {
+      els["ignore-content"].value = els["ignore-content"].value.replaceAll("\\", "/");
+      ignoreContentChanged();
+    });
+    document.querySelectorAll(".ignore-preset").forEach(function (button) {
+      button.addEventListener("click", function () { addIgnoreRules(ignorePresets[button.dataset.ignorePreset] || []); });
+    });
     document.querySelectorAll(".portrait-mode").forEach(function (button) {
       button.addEventListener("click", function () { setPortraitMode(button.dataset.portraitMode); });
     });
@@ -771,7 +837,7 @@ export const UI_JS = String.raw`(function () {
     els["context-results"].append(section);
   }
 
-  async function loadPortrait(force) {
+  async function loadPortrait(force, silent) {
     var projectId = els["portrait-project"].value;
     if (!projectId) {
       els["portrait-loading"].hidden = true;
@@ -780,22 +846,37 @@ export const UI_JS = String.raw`(function () {
       return;
     }
     if (!force && state.portraitProjectId === projectId) return;
-    els["portrait-loading"].replaceChildren(element("strong", "", "正在读取项目画像"));
-    els["portrait-loading"].hidden = false;
-    els["portrait-empty"].hidden = true;
-    els["portrait-content"].hidden = true;
-    els["refresh-portrait"].disabled = true;
+    if (state.portraitLoading) return;
+    state.portraitLoading = true;
+    if (!silent) {
+      els["portrait-loading"].replaceChildren(element("strong", "", "正在读取项目画像"));
+      els["portrait-loading"].hidden = false;
+      els["portrait-empty"].hidden = true;
+      els["portrait-content"].hidden = true;
+      els["refresh-portrait"].disabled = true;
+    }
     try {
       var portrait = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/portrait");
       renderPortrait(portrait);
       state.portrait = portrait;
       state.portraitProjectId = projectId;
+      if (state.ignoreProjectId !== projectId) await loadIgnoreRules(projectId, silent);
     } catch (error) {
-      els["portrait-loading"].replaceChildren(errorState(error.message || "无法读取项目画像"));
-      toast(error.message || String(error), true);
+      if (!silent) {
+        els["portrait-loading"].replaceChildren(errorState(error.message || "无法读取项目画像"));
+        toast(error.message || String(error), true);
+      }
     } finally {
-      els["refresh-portrait"].disabled = false;
+      state.portraitLoading = false;
+      if (!silent) els["refresh-portrait"].disabled = false;
     }
+  }
+
+  function refreshWatchedPortrait() {
+    var portraitView = document.getElementById("portrait-view");
+    if (document.hidden || portraitView.hidden || !state.portrait || !state.portrait.watch) return;
+    if (state.portrait.project.id !== els["portrait-project"].value) return;
+    loadPortrait(true, true);
   }
 
   function renderPortrait(portrait) {
@@ -923,6 +1004,116 @@ export const UI_JS = String.raw`(function () {
     });
   }
 
+  async function loadIgnoreRules(projectId, silent) {
+    if (!projectId) return;
+    els["reload-ignore"].disabled = true;
+    try {
+      var data = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/ignore");
+      if (els["portrait-project"].value !== projectId) return;
+      els["ignore-content"].value = data.content;
+      els["ignore-status"].textContent = data.content ? "已载入项目规则" : "当前无自定义规则";
+      state.ignoreProjectId = projectId;
+      updateIgnoreWarning();
+      scheduleIgnorePreview();
+    } catch (error) {
+      els["ignore-status"].textContent = "载入失败";
+      if (!silent) toast(error.message || String(error), true);
+    } finally {
+      els["reload-ignore"].disabled = false;
+    }
+  }
+
+  var ignorePresets = {
+    generated: ["generated/", "gen/"],
+    temporary: ["*.log", "*.tmp", "*.temp"],
+    snapshots: ["__snapshots__/", "*.snap"]
+  };
+  var ignorePreviewTimer = null;
+  var ignorePreviewSequence = 0;
+
+  function ignoreContentChanged() {
+    updateIgnoreWarning();
+    scheduleIgnorePreview();
+  }
+
+  function updateIgnoreWarning() {
+    els["ignore-path-warning"].hidden = !els["ignore-content"].value.includes("\\");
+  }
+
+  function addIgnorePath() {
+    var value = els["ignore-path"].value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+    if (!value) return;
+    addIgnoreRules([value]);
+    els["ignore-path"].value = "";
+    els["ignore-content"].focus();
+  }
+
+  function addIgnoreRules(rules) {
+    var existing = els["ignore-content"].value.replace(/\r\n?/g, "\n").split("\n");
+    var seen = new Set(existing.map(function (line) { return line.trim(); }).filter(Boolean));
+    rules.forEach(function (rule) { if (!seen.has(rule)) { existing.push(rule); seen.add(rule); } });
+    while (existing.length && !existing[0]) existing.shift();
+    els["ignore-content"].value = existing.filter(function (line, index, lines) {
+      return line || (index > 0 && index < lines.length - 1);
+    }).join("\n") + "\n";
+    ignoreContentChanged();
+  }
+
+  function scheduleIgnorePreview() {
+    if (ignorePreviewTimer) clearTimeout(ignorePreviewTimer);
+    var projectId = els["portrait-project"].value;
+    if (!projectId) return;
+    els["ignore-impact-summary"].textContent = "正在计算影响范围";
+    els["ignore-impact-paths"].replaceChildren();
+    ignorePreviewTimer = window.setTimeout(function () { previewIgnoreRules(projectId); }, 300);
+  }
+
+  async function previewIgnoreRules(projectId) {
+    var sequence = ++ignorePreviewSequence;
+    try {
+      var result = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/ignore/preview", {
+        method: "POST", body: { content: els["ignore-content"].value }
+      });
+      if (sequence !== ignorePreviewSequence || els["portrait-project"].value !== projectId) return;
+      els["ignore-impact-summary"].textContent = result.matchedCount
+        ? "将排除 " + result.matchedCount + " / " + result.totalIndexed + " 个当前索引来源"
+        : "不会移除当前已索引来源";
+      result.samplePaths.forEach(function (path) { els["ignore-impact-paths"].append(element("code", "", path)); });
+    } catch (error) {
+      if (sequence !== ignorePreviewSequence || els["portrait-project"].value !== projectId) return;
+      els["ignore-impact-summary"].textContent = error.message || "无法计算影响范围";
+      els["ignore-impact-paths"].replaceChildren();
+    }
+  }
+
+  async function saveIgnoreRules(event) {
+    event.preventDefault();
+    var projectId = els["portrait-project"].value;
+    if (!projectId) return;
+    var content = els["ignore-content"].value;
+    els["save-ignore"].disabled = true;
+    els["reload-ignore"].disabled = true;
+    els["ignore-status"].textContent = "正在保存并更新索引";
+    try {
+      var result = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/ignore", {
+        method: "PUT", body: { content: content }
+      });
+      if (els["portrait-project"].value !== projectId) return;
+      els["ignore-content"].value = result.content;
+      els["ignore-status"].textContent = "已保存，索引已更新";
+      state.ignoreProjectId = projectId;
+      await loadPortrait(true);
+      toast("忽略规则已保存，项目索引已更新");
+    } catch (error) {
+      if (els["portrait-project"].value !== projectId) return;
+      els["ignore-status"].textContent = "保存失败";
+      toast(error.message || String(error), true);
+    } finally {
+      els["save-ignore"].disabled = false;
+      els["reload-ignore"].disabled = false;
+    }
+  }
+
   async function indexSelectedProject() {
     var projectId = els["portrait-project"].value;
     if (!projectId) return;
@@ -935,7 +1126,7 @@ export const UI_JS = String.raw`(function () {
     var active = Boolean(state.portrait && state.portrait.project.id === projectId && state.portrait.watch);
     await mutatePortrait("/api/projects/" + encodeURIComponent(projectId) + "/watch", active
       ? { method: "DELETE" }
-      : { method: "POST", body: { debounceMs: 1000 } }, active ? "文件监听已停止" : "文件监听已启动", els["toggle-watch"]);
+      : { method: "POST", body: { debounceMs: 300 } }, active ? "文件监听已停止" : "文件监听已启动", els["toggle-watch"]);
   }
 
   async function reviewCandidate(candidateId, action) {

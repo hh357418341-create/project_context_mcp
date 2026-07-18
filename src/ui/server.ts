@@ -10,6 +10,7 @@ import { memoryTypeSchema } from "../memory/memory-service.js";
 import { userMemoryScopeSchema } from "../memory/user-memory-service.js";
 import { UI_CSS, UI_HTML, UI_JS } from "./assets.js";
 import { GRAPH_RELATION_TYPES } from "../code-intelligence/graph-service.js";
+import { DEFAULT_WATCH_DEBOUNCE_MS } from "../indexing/watch-service.js";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const SESSION_COOKIE = "project_context_ui";
@@ -32,6 +33,9 @@ const contextInputSchema = z.object({
 }).strict();
 const graphRelationSchema = z.enum(GRAPH_RELATION_TYPES);
 const graphNodeIdSchema = z.string().trim().min(1).max(800);
+const projectIgnoreInputSchema = z.object({
+  content: z.string().max(60_000).refine((value) => !value.includes("\0"), "Ignore rules cannot contain NUL bytes."),
+}).strict();
 
 export interface UiServerHandle {
   url: string;
@@ -130,6 +134,26 @@ async function routeRequest(
       await withApp(response, (app) => app.portrait(projectId));
       return;
     }
+    const projectIgnoreMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/ignore$/);
+    if (projectIgnoreMatch) {
+      const projectId = decodeSegment(projectIgnoreMatch[1]!);
+      if (request.method === "GET") {
+        await withApp(response, (app) => app.readProjectIgnore(projectId));
+        return;
+      }
+      if (request.method === "PUT") {
+        const input = projectIgnoreInputSchema.parse(await readJsonBody(request));
+        await withApp(response, (app) => app.writeProjectIgnore(projectId, input.content));
+        return;
+      }
+    }
+    const projectIgnorePreviewMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/ignore\/preview$/);
+    if (request.method === "POST" && projectIgnorePreviewMatch) {
+      const projectId = decodeSegment(projectIgnorePreviewMatch[1]!);
+      const input = projectIgnoreInputSchema.parse(await readJsonBody(request));
+      await withApp(response, (app) => app.previewProjectIgnore(projectId, input.content));
+      return;
+    }
     const projectActionMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/(index|watch)$/);
     if (projectActionMatch) {
       const projectId = decodeSegment(projectActionMatch[1]!);
@@ -139,7 +163,7 @@ async function routeRequest(
         return;
       }
       if (request.method === "POST" && action === "watch") {
-        const input = z.object({ debounceMs: z.number().int().min(100).max(60_000).default(1_000) })
+        const input = z.object({ debounceMs: z.number().int().min(100).max(60_000).default(DEFAULT_WATCH_DEBOUNCE_MS) })
           .strict().parse(await readJsonBody(request));
         await withApp(response, (app) => app.watchStart(projectId, input.debounceMs, false));
         return;

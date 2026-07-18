@@ -17,6 +17,7 @@ Project Context MCP 是一个面向编码智能体的本地优先、跨会话项
 - 根据项目根目录识别并排除 Codex 运行会话、缓存、日志、附件和本地密钥存储
 - 为已索引文本块建立外键索引，保证大型数据库中的来源清理行为可预期
 - 默认排除 `.env`、凭据、私钥、数据库、二进制文件、生成目录和大文件
+- 默认排除 `.d` 依赖文件、`.o/.obj` 目标文件、`.a/.lib` 静态库、字节码、编译缓存和覆盖率/性能分析产物
 - 使用 Tree-sitter 索引 TypeScript、TSX、JavaScript、JSX、MJS 和 CJS 符号
 - 搜索与任务上下文包含导入、调用、继承和实现关系
 - 自动检测 Git、Mercurial（hg）和 Subversion（svn），记录版本、分支、工作区状态与差异哈希证据，但不持久化完整 diff
@@ -101,7 +102,7 @@ node dist/cli.js project open D:\project\my-app
 node dist/cli.js index <project-id>
 
 # 或保持显式的进程生命周期文件监听
-node dist/cli.js watch <project-id> --debounce 1000
+node dist/cli.js watch <project-id> --debounce 300
 
 # 在系统浏览器中打开本地工作台
 node dist/cli.js ui
@@ -161,7 +162,19 @@ node dist/cli.js project restore-encrypted D:\ProjectMemoryBackups\my-app.pcmb `
 
 ## 本地项目工作台
 
-`project-context ui` 会启动一个仅绑定到 `127.0.0.1` 的临时 HTTP 服务，自动选择可用端口并打开系统浏览器。项目画像汇总索引健康状态、代码智能、文件类型、Git 状态、记忆、候选、任务和主要索引来源，并可直接执行增量索引、控制进程级 watcher、审核候选、清理过期记忆以及结束历史任务。工作台还可以管理 `user`、`workspace`、`project`、`module` 和 `task` 作用域规则。
+`project-context ui` 会启动一个仅绑定到 `127.0.0.1` 的临时 HTTP 服务，自动选择可用端口并打开系统浏览器。项目画像汇总索引健康状态、代码智能、文件类型、Git 状态、记忆、候选、任务和主要索引来源，并可直接执行增量索引、控制进程级 watcher、审核候选、清理过期记忆以及结束历史任务。监听开启时，当前项目画像会自动刷新索引与记忆状态。索引过滤编辑器支持常用规则快捷添加、Windows 路径规范化和保存前影响预览，确认后将规则原子写入 `.project-context-ignore` 并立即更新索引。工作台还可以管理 `user`、`workspace`、`project`、`module` 和 `task` 作用域规则。
+
+### Windows 一键启动
+
+在仓库根目录双击 [`start-web.cmd`](start-web.cmd)，即可启动本地工作台并自动打开系统浏览器。启动器会以自身所在目录作为项目目录；如果 `dist/cli.js` 尚不存在，则会先使用已有依赖执行 `npm run build`。首次使用仍需在仓库中执行一次 `npm install`。
+
+需要桌面入口时，右键单击 `start-web.cmd`，选择“发送到 > 桌面快捷方式”。工作台运行期间请保留命令窗口；按 `Ctrl+C` 或关闭窗口即可停止服务。不要收藏或复制某次启动产生的完整 URL 作为固定入口，因为端口和启动令牌属于当前服务进程；以后仍应通过启动器打开工作台。
+
+### macOS 一键启动
+
+在仓库根目录双击 [`start-web.command`](start-web.command)，即可启动本地工作台并自动打开默认浏览器。启动器兼容 Apple Silicon 和 Intel Homebrew 的常见 Node.js 安装路径，并与 Windows 版本一样在缺少 `dist/cli.js` 时使用已有依赖自动构建。
+
+如果文件不可执行，请在终端中运行一次 `chmod +x start-web.command`。如果 macOS 首次阻止打开，请在 Finder 中按住 `Control` 单击该文件，选择“打开”并确认。工作台运行期间请保留终端窗口；按 `Control+C` 或关闭窗口即可停止服务。首次使用仍需在仓库中执行一次 `npm install`，并且不应收藏某次启动产生的临时完整 URL。
 
 项目画像包含基于 Cytoscape.js 的交互式关系图。文件级视图会聚合项目依赖，而不是将每条原始关系都发送到浏览器；选择或搜索文件及符号后，可以按需展开一跳或两跳符号邻域。节点可自由拖拽，画布支持平移、缩放、适配，以及力导向、分层和环形布局。`IMPORTS`、`CALLS`、`EXTENDS`、`IMPLEMENTS` 关系可以独立筛选，节点详情会关联到已索引的源码路径和行号。
 
@@ -336,7 +349,7 @@ project_context
 - `user_memory_remember`、`user_memory_list`、`user_memory_update_status`
 - `task_start`、`task_checkpoint`、`task_list`、`task_complete`、`task_cancel`
 
-`project_index` 会返回符号与关系总数、过期记忆 ID、新生成的候选以及 Git 元数据。存在 Git 时优先使用 Git 证据；没有 Git 的项目仍可以根据新增或修改的知识文档生成候选。完成任务时，可从任务摘要、风险和明确具有长期价值的已完成事项中生成有界候选。系统不会返回或保存完整 diff。候选记忆在调用 `memory_candidate_accept` 前始终只处于待审核状态。
+`project_index` 会返回符号与关系总数、过期记忆 ID、新生成的候选以及 Git 元数据。索引和 watcher 会跳过常见跨语言编译产物，包括 C/C++ 的 `.d` 依赖文件、`.o/.obj` 目标文件、`.a/.lib` 静态库、预编译头、Java/Python 字节码以及覆盖率和性能分析输出。存在 Git 时优先使用 Git 证据；没有 Git 的项目仍可以根据新增或修改的知识文档生成候选。完成任务时，可从任务摘要、风险和明确具有长期价值的已完成事项中生成有界候选。系统不会返回或保存完整 diff。候选记忆在调用 `memory_candidate_accept` 前始终只处于待审核状态。
 
 打开 Schema v4 之前创建的数据库时，只会创建 n-gram 表并立即返回。现有内容会在下一次 `project_index` 中通过小批量提交重建，期间 MCP 取消和进度报告保持有效。中断的重建会继续标记为未完成，并在之后的索引运行中安全重试。`project_doctor` 会报告该状态，也可以显式修复。
 

@@ -8,6 +8,7 @@ import { loadGlobalConfig } from "../config/paths.js";
 import { ProjectContextError, errorMessage } from "../shared/errors.js";
 import { memoryStatusSchema, memoryTypeSchema } from "../memory/memory-service.js";
 import { userMemoryScopeSchema, userMemorySourceKindSchema } from "../memory/user-memory-service.js";
+import { DEFAULT_WATCH_DEBOUNCE_MS } from "../indexing/watch-service.js";
 
 const checkpointSchema = {
   summary: z.string().optional(),
@@ -63,7 +64,7 @@ export function createMcpServer(): McpServer {
         }),
       } : {}),
     });
-    const watch = app.watchStart(project.id, 1_000, false);
+    const watch = app.watchStart(project.id, DEFAULT_WATCH_DEBOUNCE_MS, false);
     return { ...project, managedIndex, watch };
   }));
 
@@ -163,7 +164,7 @@ export function createMcpServer(): McpServer {
     outputSchema,
     inputSchema: {
       projectId: z.string().min(1),
-      debounceMs: z.number().int().min(100).max(60_000).default(1_000),
+      debounceMs: z.number().int().min(100).max(60_000).default(DEFAULT_WATCH_DEBOUNCE_MS),
       initialIndex: z.boolean().default(true),
     },
     annotations: { idempotentHint: true },

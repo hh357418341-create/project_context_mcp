@@ -10,6 +10,7 @@ import { memoryStatusSchema, memoryTypeSchema } from "./memory/memory-service.js
 import { userMemoryScopeSchema, userMemorySourceKindSchema } from "./memory/user-memory-service.js";
 import type { TaskCheckpoint } from "./tasks/task-service.js";
 import { startUiServer } from "./ui/server.js";
+import { DEFAULT_WATCH_DEBOUNCE_MS } from "./indexing/watch-service.js";
 
 const program = new Command()
   .name("project-context")
@@ -120,7 +121,7 @@ program.command("index")
 program.command("watch")
   .description("Watch a project and incrementally index debounced file changes")
   .argument("<project-id>")
-  .option("--debounce <milliseconds>", "debounce interval", numberOption, 1_000)
+  .option("--debounce <milliseconds>", "debounce interval", numberOption, DEFAULT_WATCH_DEBOUNCE_MS)
   .option("--no-initial-index", "wait for the first file change before indexing")
   .action(async (projectId: string, options: { debounce: number; initialIndex: boolean }) => {
     const app = await ProjectContextApp.create();

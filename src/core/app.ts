@@ -42,15 +42,22 @@ import {
 import { buildProjectContext, type ProjectContext } from "../context/context-service.js";
 import type { z } from "zod/v4";
 import { ProjectContextError } from "../shared/errors.js";
-import { rm } from "node:fs/promises";
-import { extname } from "node:path";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import ignore from "ignore";
+import { defaultIgnorePatterns } from "../indexing/file-policy.js";
 import {
   UserMemoryService,
   type UserMemoryRecord,
   userMemoryScopeSchema,
   userMemorySourceKindSchema,
 } from "../memory/user-memory-service.js";
-import { ProjectWatchService, type ProjectWatchStatus } from "../indexing/watch-service.js";
+import {
+  DEFAULT_WATCH_DEBOUNCE_MS,
+  ProjectWatchService,
+  type ProjectWatchStatus,
+} from "../indexing/watch-service.js";
 import {
   backupEncrypted,
   decryptBackupToTemporary,
@@ -132,7 +139,7 @@ export class ProjectContextApp {
     return this.projects.restore(input);
   }
 
-  watchStart(projectId: string, debounceMs = 1_000, initialIndex = true): ProjectWatchStatus {
+  watchStart(projectId: string, debounceMs = DEFAULT_WATCH_DEBOUNCE_MS, initialIndex = true): ProjectWatchStatus {
     const project = this.projects.get(projectId);
     return projectWatches.start(projectId, project.rootPath, debounceMs, initialIndex);
   }
@@ -234,6 +241,64 @@ export class ProjectContextApp {
     } finally {
       activeIndexes.delete(projectId);
     }
+  }
+
+  async readProjectIgnore(projectId: string): Promise<{ content: string }> {
+    const project = this.projects.get(projectId);
+    try {
+      return { content: await readFile(join(project.rootPath, ".project-context-ignore"), "utf8") };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { content: "" };
+      throw error;
+    }
+  }
+
+  async previewProjectIgnore(projectId: string, content: string): Promise<{
+    matchedCount: number;
+    totalIndexed: number;
+    samplePaths: string[];
+  }> {
+    validateProjectIgnore(content);
+    const project = this.projects.get(projectId);
+    const matcher = ignore().add(defaultIgnorePatterns(project.rootPath));
+    try {
+      matcher.add(await readFile(join(project.rootPath, ".gitignore"), "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    try {
+      matcher.add(content.replace(/\r\n?/g, "\n"));
+    } catch (error) {
+      throw new ProjectContextError(
+        "INVALID_PROJECT_IGNORE",
+        `Project ignore rules are invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return this.withDb(projectId, (db) => {
+      const paths = (db.prepare("SELECT path FROM sources ORDER BY path").all() as Array<{ path: string }>)
+        .map((row) => row.path);
+      const matched = paths.filter((path) => matcher.ignores(path));
+      return { matchedCount: matched.length, totalIndexed: paths.length, samplePaths: matched.slice(0, 8) };
+    });
+  }
+
+  async writeProjectIgnore(projectId: string, content: string): Promise<{
+    content: string;
+    index: Awaited<ReturnType<ProjectContextApp["index"]>>;
+  }> {
+    validateProjectIgnore(content);
+    const project = this.projects.get(projectId);
+    const normalized = content.replace(/\r\n?/g, "\n");
+    const path = join(project.rootPath, ".project-context-ignore");
+    const temporaryPath = join(project.rootPath, `.project-context-ignore.${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporaryPath, normalized, { encoding: "utf8", flag: "wx" });
+      await rename(temporaryPath, path);
+    } catch (error) {
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+    return { content: normalized, index: await this.index(projectId) };
   }
 
   search(projectId: string, query: string, limit = 20): SearchHit[] {
@@ -490,6 +555,12 @@ export class ProjectContextApp {
     } finally {
       db.close();
     }
+  }
+}
+
+function validateProjectIgnore(content: string): void {
+  if (Buffer.byteLength(content, "utf8") > 60_000 || content.includes("\0")) {
+    throw new ProjectContextError("INVALID_PROJECT_IGNORE", "Project ignore rules are invalid or too large.");
   }
 }
 

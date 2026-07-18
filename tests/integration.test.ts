@@ -76,6 +76,42 @@ describe("Project Context core", () => {
     }
   });
 
+  it("excludes cross-language compiler artifacts while retaining source files", async () => {
+    await mkdir(join(projectRoot, "target", "debug"), { recursive: true });
+    await mkdir(join(projectRoot, ".playwright-cli"), { recursive: true });
+    await writeFile(join(projectRoot, "src", "worker.c"), "int worker(void) { return 7; }\n", "utf8");
+    await writeFile(join(projectRoot, "src", "worker-deps.d"), "src/worker.o: src/worker.c include/worker.h\n", "utf8");
+    await writeFile(join(projectRoot, "src", "worker.d"), "module worker;\nint dLanguageWorker() { return 8; }\n", "utf8");
+    await writeFile(join(projectRoot, "src", "worker.o"), "generated object payload\n", "utf8");
+    await writeFile(join(projectRoot, "src", "libworker.a"), "generated static archive payload\n", "utf8");
+    await writeFile(join(projectRoot, "src", "worker.lib"), "generated windows library payload\n", "utf8");
+    await writeFile(join(projectRoot, "src", "worker.pch"), "generated precompiled header payload\n", "utf8");
+    await writeFile(join(projectRoot, "src", "cache.pyc"), "generated python cache text\n", "utf8");
+    await writeFile(join(projectRoot, "src", "Worker.class"), "generated java bytecode text\n", "utf8");
+    await writeFile(join(projectRoot, "target", "debug", "build.log"), "generated rust output\n", "utf8");
+    await writeFile(join(projectRoot, ".playwright-cli", "session.yml"), "generated browser session\n", "utf8");
+
+    const app = await ProjectContextApp.create();
+    try {
+      const project = await app.openProject(projectRoot);
+      await app.index(project.id);
+      expect(app.search(project.id, "worker(void)").some((hit) => hit.source === "src/worker.c")).toBe(true);
+      expect(app.search(project.id, "dLanguageWorker").some((hit) => hit.source === "src/worker.d")).toBe(true);
+      expect(app.search(project.id, "include/worker.h")).toEqual([]);
+      expect(app.search(project.id, "generated object payload")).toEqual([]);
+      expect(app.search(project.id, "generated static archive payload")).toEqual([]);
+      expect(app.search(project.id, "generated windows library payload")).toEqual([]);
+      expect(app.search(project.id, "generated precompiled header payload")).toEqual([]);
+      expect(app.search(project.id, "generated python cache")).toEqual([]);
+      expect(app.search(project.id, "generated java bytecode")).toEqual([]);
+      expect(app.search(project.id, "generated rust output")).toEqual([]);
+      expect(app.search(project.id, "generated browser session")).toEqual([]);
+      expect(app.health(project.id)).toMatchObject({ sources: 4 });
+    } finally {
+      app.close();
+    }
+  });
+
   it("persists memory lifecycle, task checkpoints, and assembled context", async () => {
     const app = await ProjectContextApp.create();
     try {
