@@ -12,18 +12,19 @@ export const UI_HTML = String.raw`<!doctype html>
   <header class="app-header">
     <div class="brand">
       <span class="brand-mark">PC</span>
-      <div><strong>Project Context</strong><span>本地项目工作台</span></div>
+      <div><strong>Project Context</strong><span>任务运行工作台</span></div>
     </div>
     <nav class="view-tabs" aria-label="主要视图">
-      <button class="tab active" data-view="portrait">项目画像</button>
+      <button class="tab active" data-view="task">任务流水线</button>
+      <button class="tab" data-view="portrait">项目画像</button>
       <button class="tab" data-view="rules">规则</button>
-      <button class="tab" data-view="context">上下文预览</button>
+      <button class="tab" data-view="context">上下文</button>
     </nav>
-    <div class="local-state"><span class="status-dot"></span>仅限本机</div>
+    <div class="local-state"><span class="status-dot"></span><div><strong>本地运行</strong><span>连接正常</span></div></div>
   </header>
 
   <main>
-    <section id="portrait-view" class="portrait-view">
+    <section id="portrait-view" class="portrait-view" hidden>
       <header class="portrait-toolbar">
         <div><span class="panel-label">PROJECT PORTRAIT</span><h1>项目画像</h1></div>
         <div class="portrait-actions">
@@ -131,6 +132,31 @@ export const UI_HTML = String.raw`<!doctype html>
       </div>
     </section>
 
+    <section id="task-view" class="task-view">
+      <header class="task-toolbar">
+        <div><span class="panel-label">LIVE OPERATIONS</span><h1>任务流水线</h1></div>
+        <div class="task-toolbar-actions">
+          <div class="task-project-picker">
+            <label for="task-project-search">切换项目</label>
+            <input id="task-project-search" type="search" role="combobox" autocomplete="off" aria-autocomplete="list" aria-controls="task-project-results" aria-expanded="false" placeholder="搜索项目名称或路径">
+            <div id="task-project-results" class="task-project-results" role="listbox" hidden></div>
+            <select id="task-project" hidden></select>
+          </div>
+          <div class="task-live-state" aria-label="自动刷新已开启"><span></span>实时更新</div>
+          <button id="refresh-tasks" class="secondary-button" type="button">刷新</button>
+        </div>
+      </header>
+      <div id="task-loading" class="empty-state"><strong>正在读取任务动态</strong></div>
+      <div id="task-empty" class="empty-state" hidden><strong>没有可展示的项目</strong><span>登记项目后，任务动态会显示在这里。</span></div>
+      <div id="task-workspace" class="task-workspace" hidden>
+        <aside class="task-queue" aria-labelledby="task-queue-title">
+          <header><div><span class="panel-label">TASK QUEUE</span><h2 id="task-queue-title">任务队列</h2></div><span id="task-count" class="task-count"></span></header>
+          <div id="task-list" class="task-list"></div>
+        </aside>
+        <div id="task-detail" class="task-detail" aria-live="polite"></div>
+      </div>
+    </section>
+
     <section id="rules-view" class="rules-layout" hidden>
       <aside class="scope-panel">
         <div class="panel-label">作用范围</div>
@@ -224,19 +250,22 @@ export const UI_CSS = String.raw`:root {
 body { margin: 0; min-width: 320px; background: var(--bg); color: var(--text); font-size: 14px; letter-spacing: 0; }
 button, input, select, textarea { font: inherit; letter-spacing: 0; }
 button { cursor: pointer; }
-.app-header { height: 64px; display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr); align-items: center; padding: 0 24px; background: #202824; color: #fff; border-bottom: 1px solid #303b36; }
+.app-header { height: 72px; display: grid; grid-template-columns: minmax(230px, 1fr) auto minmax(230px, 1fr); align-items: center; padding: 0 24px; background: #16221d; color: #fff; border-bottom: 1px solid #2d3b35; box-shadow: 0 5px 18px rgba(13,25,19,.16); }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark { width: 32px; height: 32px; display: grid; place-items: center; background: #e9f3ee; color: #184b38; border-radius: 5px; font-weight: 800; font-size: 12px; }
+.brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.45); background: #e9f3ee; color: #184b38; border-radius: 6px; font-weight: 900; font-size: 12px; box-shadow: 0 5px 14px rgba(0,0,0,.14); }
 .brand div { display: flex; flex-direction: column; min-width: 0; }
-.brand strong { font-size: 14px; }
-.brand div span { color: #acb8b2; font-size: 11px; margin-top: 2px; }
-.view-tabs { display: flex; align-self: stretch; }
-.tab { position: relative; min-width: 100px; border: 0; background: transparent; color: #aeb9b4; font-weight: 600; }
-.tab.active { color: #fff; }
-.tab.active::after { content: ""; position: absolute; height: 3px; left: 18px; right: 18px; bottom: 0; background: #58b98d; }
-.local-state { justify-self: end; color: #bdc8c3; font-size: 12px; display: flex; align-items: center; gap: 7px; }
+.brand strong { font-size: 14px; line-height: 1.2; }
+.brand div span { color: #9daea6; font-size: 10px; margin-top: 3px; }
+.view-tabs { display: flex; align-items: center; gap: 3px; padding: 4px; border: 1px solid #35443d; border-radius: 6px; background: #101a16; }
+.tab { min-width: 0; height: 38px; padding: 0 15px; border: 0; border-radius: 4px; background: transparent; color: #aebdb6; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.tab:hover { color: #fff; background: #26342e; }
+.tab.active { color: #123d2d; background: #e8f4ee; box-shadow: 0 2px 8px rgba(0,0,0,.16); }
+.local-state { justify-self: end; display: flex; align-items: center; gap: 9px; color: #bdc8c3; }
+.local-state div { display: grid; gap: 2px; }
+.local-state strong { color: #e5ede9; font-size: 11px; }
+.local-state div span { color: #8fa199; font-size: 9px; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #58b98d; box-shadow: 0 0 0 3px rgba(88,185,141,.15); }
-main { height: calc(100vh - 64px); overflow: hidden; }
+main { height: calc(100vh - 72px); overflow: hidden; }
 .rules-layout { height: 100%; display: grid; grid-template-columns: 210px minmax(300px, 420px) minmax(440px, 1fr); }
 .scope-panel, .rule-list-panel, .editor-panel { min-height: 0; background: var(--surface); }
 .scope-panel { padding: 22px 14px; border-right: 1px solid var(--line); background: var(--surface-muted); overflow-y: auto; }
@@ -306,6 +335,149 @@ h1, h2, p { margin: 0; }
 .context-entry p { color: #56615c; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .context-entry small { display: block; margin-top: 5px; color: var(--muted); }
 .context-empty { margin-top: 80px; }
+.task-view { height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.task-toolbar { position: relative; z-index: 10; flex: 0 0 auto; min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 24px; border-bottom: 1px solid var(--line); background: #f9fbfa; box-shadow: 0 2px 10px rgba(19,36,29,.04); }
+.task-toolbar .panel-label { margin-bottom: 4px; color: #47715e; font-size: 9px; }
+.task-toolbar h1 { font-size: 20px; line-height: 1.25; }
+.task-toolbar-actions { display: flex; align-items: end; gap: 10px; }
+.task-project-picker { position: relative; width: min(420px, 42vw); display: grid; gap: 5px; }
+.task-project-picker > label { color: #3e4944; font-size: 10px; font-weight: 800; }
+.task-project-picker input { height: 38px; padding: 8px 11px; background: #fff; font-weight: 650; }
+.task-project-results { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; max-height: min(262px, 42vh); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; box-shadow: 0 14px 30px rgba(15,31,23,.18); }
+.task-project-option { width: 100%; min-width: 0; display: grid; align-content: center; gap: 3px; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: #fff; color: var(--text); text-align: left; }
+.task-project-option:last-child { border-bottom: 0; }
+.task-project-option:hover, .task-project-option.focused { background: #edf7f2; }
+.task-project-option.selected { box-shadow: inset 3px 0 #2d8e69; }
+.task-project-option strong, .task-project-option small { display: block; overflow-wrap: anywhere; }
+.task-project-option strong { font-size: 11px; }
+.task-project-option small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.task-project-no-results { padding: 14px 12px; color: var(--muted); font-size: 11px; }
+.task-live-state { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.task-live-state span { width: 7px; height: 7px; border-radius: 50%; background: #36a474; box-shadow: 0 0 0 0 rgba(54,164,116,.28); animation: live-pulse 2.2s ease-out infinite; }
+.task-workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); }
+.task-queue { min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface-muted); }
+.task-queue > header { position: sticky; top: 0; z-index: 1; min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: rgba(248,250,249,.96); }
+.task-queue h2 { font-size: 15px; }
+.task-count { color: var(--muted); font-size: 11px; }
+.task-list { padding: 8px; }
+.task-list-group { margin: 12px 8px 6px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.task-list-item { width: 100%; display: grid; grid-template-columns: 9px minmax(0, 1fr); gap: 10px; padding: 12px 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); text-align: left; }
+.task-list-item:hover { background: #fff; border-color: var(--line); }
+.task-list-item.active { background: #fff; border-color: var(--line-strong); box-shadow: 0 3px 12px rgba(19,36,29,.06); }
+.task-list-indicator { width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: #9da7a2; }
+.task-list-item.in-progress .task-list-indicator { background: #2d9d6c; box-shadow: 0 0 0 4px rgba(45,157,108,.12); }
+.task-list-copy { min-width: 0; }
+.task-list-copy strong, .task-list-copy span, .task-list-copy small { display: block; overflow-wrap: anywhere; }
+.task-list-copy strong { font-size: 12px; line-height: 1.4; }
+.task-list-copy span { margin-top: 4px; color: #56615c; font-size: 10px; line-height: 1.45; }
+.task-list-copy small { margin-top: 6px; color: var(--muted); font-size: 9px; }
+.task-detail { min-width: 0; min-height: 0; overflow-y: auto; background: #fff; }
+.task-focus { padding: 26px 28px 22px; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, #f4faf7 0, #fff 58%); }
+.task-focus-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; max-width: 1120px; margin: 0 auto; }
+.task-focus-title { max-width: 760px; }
+.task-focus-title h2 { font-size: 22px; line-height: 1.35; overflow-wrap: anywhere; }
+.task-focus-title p { margin-top: 9px; color: #4f5e57; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.factory-scene { --station-position: 37.5%; max-width: 1120px; display: grid; grid-template-rows: 116px auto auto; margin: 22px auto 0; border: 1px solid #cbd8d2; border-radius: 6px; overflow: hidden; background: #fff; box-shadow: 0 7px 18px rgba(19,36,29,.06); }
+.factory-floor { position: relative; min-width: 620px; overflow: hidden; background: #edf5f1; }
+.factory-floor::before { content: ""; position: absolute; inset: auto 0 0; height: 36px; background: #dce7e1; border-top: 1px solid #c8d6cf; }
+.factory-stations { position: absolute; inset: 8px 20px 31px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.factory-station { position: relative; display: grid; justify-items: center; align-content: start; color: #728079; font-size: 9px; font-weight: 800; }
+.factory-station-label { position: relative; z-index: 9; order: -1; min-height: 14px; margin-bottom: 4px; line-height: 14px; }
+.factory-machine { position: relative; width: 46px; height: 52px; border: 2px solid #64736c; border-radius: 4px 4px 2px 2px; background: #f8fbf9; }
+.factory-machine::before { content: ""; position: absolute; top: 9px; left: 8px; width: 26px; height: 15px; border: 2px solid #78867f; border-radius: 2px; background: #dce7e2; }
+.factory-machine::after { content: ""; position: absolute; left: 9px; right: 9px; bottom: 8px; height: 4px; border-radius: 2px; background: #aab7b1; box-shadow: 0 -7px #aab7b1; }
+.factory-station.done .factory-machine { border-color: #438b6a; background: #e2f1e9; }
+.factory-station.done .factory-machine::before { border-color: #4b9a74; background: #bfe3d1; }
+.factory-station.current { color: #176342; }
+.factory-station.current .factory-machine { border-color: #176b4d; background: #fff; box-shadow: 0 0 0 5px rgba(39,145,99,.12); }
+.factory-station.current .factory-machine::before { border-color: #2f9568; background: #bfe9d4; animation: factory-screen 1.15s ease-in-out infinite alternate; }
+.factory-conveyor { position: absolute; z-index: 4; left: 28px; right: 28px; bottom: 20px; height: 18px; border: 2px solid #34423b; border-radius: 3px; overflow: hidden; background: repeating-linear-gradient(90deg, #7f9088 0 12px, #acbbb4 12px 24px); }
+.factory-conveyor::before, .factory-conveyor::after { content: ""; position: absolute; bottom: -10px; width: 7px; height: 10px; background: #4a5952; }
+.factory-conveyor::before { left: 14%; }
+.factory-conveyor::after { right: 14%; }
+.factory-unit { position: absolute; z-index: 7; bottom: 37px; left: calc(var(--station-position) - 22px); width: 44px; height: 31px; display: grid; place-items: center; border: 2px solid #314039; border-radius: 3px; background: #f0b85b; color: #553508; font-size: 8px; font-weight: 900; transition: left .55s ease; }
+.factory-unit::before { content: ""; position: absolute; top: -5px; left: 5px; right: 5px; height: 5px; border: 2px solid #314039; border-bottom: 0; background: #ffd17f; }
+.factory-worker { position: absolute; z-index: 8; bottom: 39px; left: calc(var(--station-position) + 24px); width: 34px; height: 53px; transition: left .55s ease; }
+.factory-worker-head { position: absolute; top: 0; left: 8px; width: 19px; height: 20px; border: 2px solid #29352f; border-radius: 50%; background: #f1ccb0; }
+.factory-worker-head::before { content: ""; position: absolute; top: -4px; left: -3px; right: -3px; height: 9px; border: 2px solid #29352f; border-radius: 9px 9px 2px 2px; background: #e4a82e; }
+.factory-worker-body { position: absolute; top: 18px; left: 5px; width: 25px; height: 30px; border: 2px solid #29352f; border-radius: 7px 7px 2px 2px; background: #2d8e69; }
+.factory-worker-arm { position: absolute; z-index: 2; top: 24px; left: 3px; width: 8px; height: 25px; border: 2px solid #29352f; border-radius: 7px; background: #f1ccb0; transform-origin: 50% 3px; transform: rotate(48deg); }
+.factory-worker-arm.right { left: auto; right: 1px; transform: rotate(-48deg); }
+.factory-work-orders { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #d6e1dc; background: #f8fbf9; }
+.factory-order { min-width: 0; padding: 10px 12px 11px; border-right: 1px solid #dce5e1; }
+.factory-order:last-child { border-right: 0; }
+.factory-order strong, .factory-order span { display: block; overflow-wrap: anywhere; }
+.factory-order strong { color: #52615a; font-size: 9px; }
+.factory-order span { margin-top: 5px; color: #26352e; font-size: 10px; line-height: 1.5; }
+.factory-order.current { background: #eef8f3; box-shadow: inset 0 3px #2f9568; }
+.factory-order.current strong { color: #176342; }
+.factory-status { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; color: #176342; font-size: 10px; font-weight: 800; }
+.factory-status-copy { display: flex; align-items: center; gap: 7px; }
+.factory-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #2c9c6c; }
+.factory-stage-name { color: var(--muted); font-weight: 700; }
+.factory-scene.working .factory-conveyor { animation: factory-belt .65s linear infinite; }
+.factory-scene.working .factory-unit { animation: factory-unit 1s ease-in-out infinite alternate; }
+.factory-scene.working .factory-worker-head { animation: worker-nod 2.2s ease-in-out infinite; }
+.factory-scene.working .factory-worker-arm { animation: factory-work-left .46s ease-in-out infinite alternate; }
+.factory-scene.working .factory-worker-arm.right { animation: factory-work-right .46s .23s ease-in-out infinite alternate; }
+.factory-scene.working .factory-status-dot { animation: live-pulse 2.2s ease-out infinite; }
+.factory-scene.blocked { border-color: #dfbf84; }
+.factory-scene.blocked .factory-floor { background: #fff6e5; }
+.factory-scene.blocked .factory-station.current .factory-machine { border-color: #ae7014; box-shadow: 0 0 0 5px rgba(174,112,20,.12); }
+.factory-scene.blocked .factory-unit { background: #ffd27e; animation: factory-blocked .7s ease-in-out infinite alternate; }
+.factory-scene.blocked .factory-order.current { background: #fff6e5; box-shadow: inset 0 3px #bc7b19; }
+.factory-scene.blocked .factory-status { color: #82500a; }
+.factory-scene.blocked .factory-status-dot { background: #bc7b19; }
+.factory-scene.complete { --station-position: 87.5%; }
+.factory-scene.complete .factory-unit { background: #7bc39f; color: #123f2d; }
+.factory-scene.complete .factory-worker { left: calc(var(--station-position) - 58px); }
+.factory-scene.complete .factory-worker-arm { transform: rotate(150deg); }
+.factory-scene.complete .factory-worker-arm.right { transform: rotate(-150deg); }
+.factory-scene.complete .factory-status { color: #3d6e58; }
+.factory-scene.complete .factory-status-dot { background: #438b6a; }
+.task-focus-meta { display: flex; flex-wrap: wrap; gap: 12px 20px; max-width: 1120px; margin: 18px auto 0; color: var(--muted); font-size: 10px; }
+.task-focus-meta strong { color: #3d4943; }
+.task-progress { max-width: 1120px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 24px auto 0; }
+.task-progress-step { position: relative; min-width: 0; padding: 20px 10px 0 0; color: var(--muted); font-size: 10px; }
+.task-progress-step::before { content: ""; position: absolute; top: 5px; left: 0; right: 0; height: 2px; background: #dfe5e2; }
+.task-progress-step::after { content: ""; position: absolute; z-index: 1; top: 0; left: 0; width: 12px; height: 12px; border: 2px solid #c8d0cc; border-radius: 50%; background: #fff; }
+.task-progress-step.done::before, .task-progress-step.current::before { background: #67b18f; }
+.task-progress-step.done::after { border-color: #2f9568; background: #2f9568; }
+.task-progress-step.current { color: var(--accent-strong); font-weight: 800; }
+.task-progress-step.current::after { border-color: #258f60; box-shadow: 0 0 0 5px rgba(37,143,96,.13); animation: task-breathe 1.8s ease-in-out infinite; }
+.task-progress-step:last-child::before { right: calc(100% - 12px); }
+.task-metrics { max-width: 1120px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 auto; border-bottom: 1px solid var(--line); }
+.task-metric { min-height: 86px; display: grid; align-content: center; padding: 14px 18px; border-right: 1px solid var(--line); }
+.task-metric:last-child { border-right: 0; }
+.task-metric strong { font-size: 21px; }
+.task-metric span { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.task-detail-grid { max-width: 1120px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 auto; }
+.task-detail-section { min-height: 190px; padding: 22px 24px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.task-detail-section:nth-child(2n) { border-right: 0; }
+.task-detail-section h3 { font-size: 13px; }
+.task-activity-list { display: grid; margin-top: 12px; }
+.task-activity { position: relative; min-height: 34px; padding: 8px 0 8px 22px; border-top: 1px solid var(--line); color: #4c5953; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.task-activity::before { content: ""; position: absolute; top: 13px; left: 3px; width: 7px; height: 7px; border: 2px solid #85a696; border-radius: 50%; background: #fff; }
+.task-activity:first-child { border-top: 0; }
+.task-activity.success::before { border-color: #2f9568; background: #2f9568; }
+.task-activity.warning::before { border-color: #b6781f; background: #fff4df; }
+.task-activity.danger::before { border-color: var(--danger); background: var(--danger-soft); }
+.task-activity small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+.task-detail-empty { height: 100%; display: grid; place-items: center; padding: 40px; text-align: center; }
+.task-detail-empty strong { display: block; font-size: 16px; }
+.task-detail-empty span { display: block; max-width: 460px; margin-top: 7px; color: var(--muted); line-height: 1.55; }
+.task-detail-actions { max-width: 1120px; display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px 28px; margin: 0 auto; }
+.task-detail.task-updated { animation: task-update 650ms ease-out; }
+@keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(54,164,116,.28); } 70%, 100% { box-shadow: 0 0 0 7px rgba(54,164,116,0); } }
+@keyframes task-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.78); } }
+@keyframes task-update { 0% { background: #e9f6ef; } 100% { background: #fff; } }
+@keyframes worker-nod { 0%, 68%, 100% { transform: rotate(0); } 74%, 88% { transform: rotate(7deg) translateY(1px); } }
+@keyframes factory-screen { from { background: #bfe9d4; box-shadow: inset 0 0 0 0 rgba(255,255,255,.6); } to { background: #72c89f; box-shadow: inset 0 0 0 3px rgba(255,255,255,.55); } }
+@keyframes factory-belt { from { background-position-x: 0; } to { background-position-x: 24px; } }
+@keyframes factory-unit { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+@keyframes factory-work-left { from { transform: rotate(38deg); } to { transform: rotate(62deg) translateY(2px); } }
+@keyframes factory-work-right { from { transform: rotate(-38deg); } to { transform: rotate(-62deg) translateY(2px); } }
+@keyframes factory-blocked { from { transform: translateX(-2px) rotate(-1deg); } to { transform: translateX(2px) rotate(1deg); } }
 .portrait-view { height: 100%; overflow-y: auto; background: var(--surface); }
 .portrait-toolbar { position: sticky; top: 0; z-index: 3; min-height: 84px; background: #fff; }
 .portrait-actions { display: flex; flex-wrap: wrap; align-items: end; justify-content: flex-end; gap: 10px; }
@@ -438,16 +610,17 @@ dialog p { color: var(--muted); line-height: 1.5; }
 [hidden] { display: none !important; }
 @media (max-width: 980px) {
   .app-header { grid-template-columns: 1fr auto; }
-  .view-tabs { order: 3; grid-column: 1 / -1; height: 44px; justify-content: center; background: #202824; }
+  .view-tabs { order: 3; grid-column: 1 / -1; height: 44px; justify-content: center; padding: 3px; border-width: 1px 0 0; border-radius: 0; background: #101a16; }
   .local-state { display: none; }
-  .app-header { height: 108px; }
-  main { height: calc(100vh - 108px); }
+  .app-header { height: 116px; }
+  main { height: calc(100vh - 116px); }
   .rules-layout { grid-template-columns: 190px minmax(280px, 1fr); }
-  .editor-panel { display: none; position: fixed; z-index: 5; top: 108px; right: 0; bottom: 0; width: min(560px, calc(100vw - 40px)); box-shadow: -8px 0 28px rgba(20,32,27,.15); }
+  .editor-panel { display: none; position: fixed; z-index: 5; top: 116px; right: 0; bottom: 0; width: min(560px, calc(100vw - 40px)); box-shadow: -8px 0 28px rgba(20,32,27,.15); }
   .editor-panel.open { display: block; }
   .icon-button { display: grid; }
   .context-controls { grid-template-columns: 1fr 1fr; }
   .task-field { grid-column: 1 / -1; }
+  .task-workspace { grid-template-columns: 260px minmax(0, 1fr); }
   .portrait-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portrait-metric:nth-child(2) { border-right: 0; }
   .portrait-metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
@@ -465,7 +638,7 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .scope-button { width: auto; flex: 0 0 auto; gap: 8px; }
   .compact-field, .check-row { display: none; }
   .rule-list-panel { min-height: calc(100vh - 210px); border-right: 0; }
-  .editor-panel { top: 108px; left: 0; width: 100vw; }
+  .editor-panel { top: 116px; left: 0; width: 100vw; }
   .two-columns { grid-template-columns: 1fr; }
   #rule-form { padding: 18px 16px 90px; }
   .form-actions { position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; padding: 12px 16px; background: #fff; border-top: 1px solid var(--line); }
@@ -473,7 +646,36 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .task-field { grid-column: auto; }
   .context-results { grid-template-columns: 1fr; border-left: 0; }
   .context-section { border-right: 0; }
-  .tab { min-width: 96px; }
+  .tab { min-width: 0; height: 36px; flex: 1 1 0; padding-inline: 5px; font-size: 10px; }
+  .task-view { overflow-y: auto; }
+  .task-toolbar { align-items: stretch; flex-direction: column; padding: 12px 16px; }
+  .task-toolbar-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .task-project-picker { width: auto; min-width: 0; }
+  .task-project-results { max-height: min(238px, 38vh); }
+  .task-workspace { height: auto; min-height: calc(100% - 138px); display: block; }
+  .task-queue { max-height: 150px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .task-queue > header { min-height: 54px; padding-block: 9px; }
+  .task-list { display: flex; gap: 7px; overflow-x: auto; padding: 8px 12px 12px; }
+  .task-list-group { display: none; }
+  .task-list-item { flex: 0 0 min(78vw, 290px); background: #fff; border-color: var(--line); }
+  .task-detail { overflow: visible; }
+  .task-focus { padding: 22px 16px 18px; }
+  .task-focus-heading { display: grid; }
+  .task-focus-title h2 { font-size: 18px; }
+  .factory-scene { overflow: hidden; }
+  .factory-floor { min-width: 0; }
+  .factory-work-orders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .factory-order:nth-child(2n) { border-right: 0; }
+  .factory-order:nth-child(-n+2) { border-bottom: 1px solid #dce5e1; }
+  .factory-status { background: #fff; }
+  .factory-scene.blocked .factory-status { background: #fffaf0; }
+  .task-progress { overflow-x: auto; grid-template-columns: repeat(4, minmax(92px, 1fr)); padding-bottom: 4px; }
+  .task-metrics { grid-template-columns: 1fr 1fr; }
+  .task-metric:nth-child(2) { border-right: 0; }
+  .task-metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .task-detail-grid { grid-template-columns: 1fr; }
+  .task-detail-section, .task-detail-section:nth-child(2n) { min-height: 0; padding: 20px 16px; border-right: 0; }
+  .task-detail-actions { padding-inline: 16px; }
   .portrait-toolbar { align-items: stretch; flex-direction: column; padding: 14px 16px; }
   .portrait-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .portrait-actions .field { grid-column: 1 / -1; min-width: 0; }
@@ -508,6 +710,13 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .graph-details .icon-button { display: grid; }
   .graph-footer { align-items: flex-start; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .task-live-state span, .task-progress-step.current::after, .task-detail.task-updated,
+  .factory-conveyor, .factory-unit, .factory-worker-head, .factory-worker-arm,
+  .factory-machine::before, .factory-status-dot { animation: none !important; }
+  .factory-unit, .factory-worker { transition: none; }
+  .toast, .graph-details { transition: none; }
+}
 `;
 
 export const UI_JS = String.raw`(function () {
@@ -516,7 +725,8 @@ export const UI_JS = String.raw`(function () {
     projects: [], memories: [], scope: "all", selectedId: null, portraitProjectId: null, portrait: null,
     graphCy: null, graphProjectId: null, graphRoot: null, graphScope: "files",
     graphSelectedId: null, graphSearchResults: [], graphSearchSequence: 0, graphSearchTimer: null,
-    portraitLoading: false, ignoreProjectId: null
+    portraitLoading: false, ignoreProjectId: null, taskProjectId: null, taskPortrait: null,
+    taskLoading: false, selectedTaskId: null, taskSignature: null, taskProjectActiveIndex: -1
   };
   var scopes = [
     ["all", "全部规则"], ["user", "全局"], ["workspace", "工作区"],
@@ -535,8 +745,9 @@ export const UI_JS = String.raw`(function () {
       await establishSession();
       await refresh();
       newRule(false);
-      await loadPortrait(false);
+      await loadTaskView(false, false);
       window.setInterval(refreshWatchedPortrait, 1500);
+      window.setInterval(refreshTaskActivity, 2500);
     } catch (error) {
       toast(error.message || String(error), true);
       document.getElementById("rule-list").replaceChildren(errorState("无法连接本地规则服务"));
@@ -551,6 +762,7 @@ export const UI_JS = String.raw`(function () {
       "editor-panel", "editor-close",
       "context-project", "context-task", "context-budget", "preview-context", "context-results",
       "context-summary", "empty-context",
+      "task-project", "task-project-search", "task-project-results", "refresh-tasks", "task-loading", "task-empty", "task-workspace", "task-count", "task-list", "task-detail",
       "portrait-project", "index-project", "toggle-watch", "refresh-portrait", "portrait-loading", "portrait-empty", "portrait-content",
       "portrait-name", "portrait-state", "portrait-path", "portrait-index-state", "portrait-metrics",
       "portrait-file-types", "portrait-git", "portrait-knowledge", "portrait-tasks", "portrait-memories", "portrait-stale-memories",
@@ -580,6 +792,27 @@ export const UI_JS = String.raw`(function () {
     });
     els["reactivate-rule"].addEventListener("click", function () { updateSelectedStatus("active"); });
     els["preview-context"].addEventListener("click", previewContext);
+    els["task-project"].addEventListener("change", function () {
+      state.taskProjectId = null; state.taskPortrait = null; state.selectedTaskId = null; state.taskSignature = null;
+      syncTaskProjectSearch();
+      loadTaskView(true, false);
+    });
+    els["task-project-search"].addEventListener("focus", function () {
+      els["task-project-search"].select();
+      renderTaskProjectResults("");
+    });
+    els["task-project-search"].addEventListener("click", function () {
+      if (els["task-project-results"].hidden) {
+        els["task-project-search"].select();
+        renderTaskProjectResults("");
+      }
+    });
+    els["task-project-search"].addEventListener("input", function () { renderTaskProjectResults(els["task-project-search"].value); });
+    els["task-project-search"].addEventListener("keydown", taskProjectSearchKeydown);
+    document.addEventListener("click", function (event) {
+      if (!event.target.closest(".task-project-picker")) closeTaskProjectResults();
+    });
+    els["refresh-tasks"].addEventListener("click", function () { loadTaskView(true, false); });
     els["portrait-project"].addEventListener("change", function () { resetGraph(); state.ignoreProjectId = null; loadPortrait(true); });
     els["index-project"].addEventListener("click", indexSelectedProject);
     els["toggle-watch"].addEventListener("click", toggleSelectedWatch);
@@ -651,7 +884,7 @@ export const UI_JS = String.raw`(function () {
   }
 
   function renderProjectOptions() {
-    [els["project-filter"], els["rule-project"], els["context-project"], els["portrait-project"]].forEach(function (select, index) {
+    [els["project-filter"], els["rule-project"], els["context-project"], els["portrait-project"], els["task-project"]].forEach(function (select, index) {
       var current = select.value;
       select.replaceChildren();
       if (index === 0) addOption(select, "", "全部项目");
@@ -659,6 +892,59 @@ export const UI_JS = String.raw`(function () {
       state.projects.forEach(function (project) { addOption(select, project.id, project.name + (project.archivedAt ? "（已归档）" : "")); });
       if ([].some.call(select.options, function (option) { return option.value === current; })) select.value = current;
     });
+    syncTaskProjectSearch();
+  }
+
+  function syncTaskProjectSearch() {
+    var project = projectById(els["task-project"].value);
+    els["task-project-search"].value = project ? project.name : "";
+    els["task-project-search"].title = project ? project.rootPath : "";
+  }
+
+  function renderTaskProjectResults(query) {
+    var normalized = query.trim().toLocaleLowerCase();
+    var matches = state.projects.filter(function (project) {
+      return !normalized || project.name.toLocaleLowerCase().includes(normalized) || project.rootPath.toLocaleLowerCase().includes(normalized);
+    }).slice(0, 30);
+    state.taskProjectActiveIndex = matches.length ? 0 : -1;
+    els["task-project-results"].replaceChildren();
+    if (!matches.length) els["task-project-results"].append(element("div", "task-project-no-results", "没有匹配的项目"));
+    matches.forEach(function (project, index) {
+      var option = element("button", "task-project-option" + (project.id === els["task-project"].value ? " selected" : "") + (index === 0 ? " focused" : ""));
+      option.type = "button"; option.setAttribute("role", "option"); option.setAttribute("aria-selected", String(project.id === els["task-project"].value));
+      option.append(element("strong", "", project.name), element("small", "", project.rootPath));
+      option.addEventListener("click", function () { selectTaskProject(project.id); });
+      els["task-project-results"].append(option);
+    });
+    els["task-project-results"].hidden = false;
+    els["task-project-search"].setAttribute("aria-expanded", "true");
+  }
+
+  function taskProjectSearchKeydown(event) {
+    var options = [].slice.call(els["task-project-results"].querySelectorAll(".task-project-option"));
+    if (event.key === "Escape") { event.preventDefault(); closeTaskProjectResults(); return; }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (els["task-project-results"].hidden) { renderTaskProjectResults(els["task-project-search"].value); options = [].slice.call(els["task-project-results"].querySelectorAll(".task-project-option")); }
+      if (!options.length) return;
+      state.taskProjectActiveIndex = (state.taskProjectActiveIndex + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+      options.forEach(function (option, index) { option.classList.toggle("focused", index === state.taskProjectActiveIndex); });
+      options[state.taskProjectActiveIndex].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter" && !els["task-project-results"].hidden && options[state.taskProjectActiveIndex]) {
+      event.preventDefault(); options[state.taskProjectActiveIndex].click();
+    }
+  }
+
+  function selectTaskProject(projectId) {
+    els["task-project"].value = projectId;
+    closeTaskProjectResults();
+    els["task-project"].dispatchEvent(new Event("change"));
+  }
+
+  function closeTaskProjectResults() {
+    els["task-project-results"].hidden = true;
+    els["task-project-search"].setAttribute("aria-expanded", "false");
+    syncTaskProjectSearch();
   }
 
   function renderScopeNav() {
@@ -1002,6 +1288,284 @@ export const UI_JS = String.raw`(function () {
       }
       container.append(row);
     });
+  }
+
+  async function loadTaskView(force, silent) {
+    var projectId = els["task-project"].value;
+    if (!projectId) {
+      els["task-loading"].hidden = true;
+      els["task-workspace"].hidden = true;
+      els["task-empty"].hidden = false;
+      return;
+    }
+    if (!force && state.taskProjectId === projectId) return;
+    if (state.taskLoading) return;
+    state.taskLoading = true;
+    if (!silent) {
+      els["task-loading"].hidden = false;
+      els["task-empty"].hidden = true;
+      els["refresh-tasks"].disabled = true;
+    }
+    try {
+      var portrait = await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/portrait");
+      if (els["task-project"].value !== projectId) return;
+      var signature = taskPortraitSignature(portrait);
+      var unchanged = state.taskProjectId === projectId && state.taskSignature === signature;
+      var changed = Boolean(state.taskSignature && state.taskSignature !== signature);
+      state.taskPortrait = portrait;
+      state.taskProjectId = projectId;
+      state.taskSignature = signature;
+      if (silent && unchanged) return;
+      renderTaskView(portrait, changed);
+    } catch (error) {
+      if (!silent) {
+        els["task-loading"].replaceChildren(errorState(error.message || "无法读取任务动态"));
+        toast(error.message || String(error), true);
+      }
+    } finally {
+      state.taskLoading = false;
+      if (!silent) els["refresh-tasks"].disabled = false;
+    }
+  }
+
+  function refreshTaskActivity() {
+    var taskView = document.getElementById("task-view");
+    if (document.hidden || taskView.hidden || !els["task-project"].value) return;
+    loadTaskView(true, true);
+  }
+
+  function taskPortraitSignature(portrait) {
+    return portrait.activeTasks.concat(portrait.completedTasks).map(function (task) {
+      return task.id + ":" + task.status + ":" + task.updatedAt;
+    }).join("|");
+  }
+
+  function renderTaskView(portrait, changed) {
+    var activeTasks = portrait.activeTasks || [];
+    var completedTasks = portrait.completedTasks || [];
+    var allTasks = activeTasks.concat(completedTasks);
+    if (!allTasks.some(function (task) { return task.id === state.selectedTaskId; })) {
+      state.selectedTaskId = allTasks.length ? allTasks[0].id : null;
+    }
+    els["task-loading"].hidden = true;
+    els["task-empty"].hidden = true;
+    els["task-workspace"].hidden = false;
+    els["task-count"].textContent = activeTasks.length + " 进行中";
+    els["task-list"].replaceChildren();
+    appendTaskGroup("进行中", activeTasks);
+    appendTaskGroup("最近完成", completedTasks);
+    if (!allTasks.length) {
+      var empty = element("div", "task-detail-empty");
+      var copy = element("div");
+      copy.append(element("strong", "", "当前没有任务"), element("span", "", "任务开始后，这里会显示当前焦点、检查点和验证状态。"));
+      empty.append(copy);
+      els["task-detail"].replaceChildren(empty);
+      return;
+    }
+    var selected = allTasks.find(function (task) { return task.id === state.selectedTaskId; }) || allTasks[0];
+    renderTaskDetail(selected, changed);
+  }
+
+  function appendTaskGroup(label, tasks) {
+    if (!tasks.length) return;
+    els["task-list"].append(element("div", "task-list-group", label));
+    tasks.forEach(function (task) {
+      var button = element("button", "task-list-item " + (task.status === "in_progress" ? "in-progress" : "complete") + (task.id === state.selectedTaskId ? " active" : ""));
+      button.type = "button";
+      var indicator = element("span", "task-list-indicator");
+      var copy = element("span", "task-list-copy");
+      copy.append(
+        element("strong", "", task.goal),
+        element("span", "", task.checkpoint.summary || (task.status === "in_progress" ? "等待下一次进度记录" : "任务已完成")),
+        element("small", "", statusLabel(task.status) + " · " + formatRelativeTime(task.updatedAt))
+      );
+      button.append(indicator, copy);
+      button.addEventListener("click", function () {
+        state.selectedTaskId = task.id;
+        renderTaskView(state.taskPortrait, false);
+      });
+      els["task-list"].append(button);
+    });
+  }
+
+  function renderTaskDetail(task, changed) {
+    var checkpoint = task.checkpoint;
+    var focusLabel = "当前焦点";
+    var focus = checkpoint.next[0];
+    if (checkpoint.blockers.length) { focusLabel = "当前阻塞"; focus = checkpoint.blockers[0]; }
+    else if (!focus && checkpoint.summary) { focusLabel = "最近进展"; focus = checkpoint.summary; }
+    if (!focus) focus = task.goal;
+
+    var focusBand = element("section", "task-focus");
+    var heading = element("div", "task-focus-heading");
+    var title = element("div", "task-focus-title");
+    title.append(element("span", "panel-label", focusLabel), element("h2", "", focus));
+    if (focus !== task.goal) title.append(element("p", "", task.goal));
+    heading.append(title);
+    var meta = element("div", "task-focus-meta");
+    meta.append(
+      element("span", "", "创建于 " + formatDate(task.createdAt)),
+      element("span", "", "最近变化 " + formatRelativeTime(task.updatedAt)),
+      element("span", "", "任务 ID " + task.id)
+    );
+    focusBand.append(heading, meta, taskProgress(task));
+
+    var metrics = element("section", "task-metrics", "");
+    metrics.append(
+      taskMetric(checkpoint.completed.length, "已完成事项"),
+      taskMetric(checkpoint.next.length, "下一步"),
+      taskMetric(checkpoint.verification.length, "验证记录"),
+      taskMetric(checkpoint.blockers.length, "阻塞项")
+    );
+
+    var details = element("div", "task-detail-grid");
+    details.append(
+      taskDetailSection("已完成", checkpoint.completed, "尚未记录完成事项", "success"),
+      taskDetailSection("接下来", checkpoint.next, task.status === "completed" ? "任务已经收尾" : "尚未记录下一步", ""),
+      verificationSection(checkpoint.verification),
+      taskIssuesSection(checkpoint.blockers, checkpoint.risks)
+    );
+
+    var actions = element("div", "task-detail-actions");
+    if (task.status === "in_progress") {
+      var complete = element("button", "secondary-button", "标记完成");
+      var cancel = element("button", "danger-button", "取消任务");
+      complete.type = cancel.type = "button";
+      complete.addEventListener("click", function () { updateTaskFromActivity(task.id, "complete", complete); });
+      cancel.addEventListener("click", function () { updateTaskFromActivity(task.id, "cancel", cancel); });
+      actions.append(complete, cancel);
+    }
+    els["task-detail"].replaceChildren(focusBand, metrics, details, actions);
+    els["task-detail"].classList.toggle("task-updated", changed);
+    if (changed) window.setTimeout(function () { els["task-detail"].classList.remove("task-updated"); }, 700);
+  }
+
+  function taskProgress(task) {
+    var checkpoint = task.checkpoint;
+    var hasProgress = Boolean(checkpoint.summary || checkpoint.completed.length || checkpoint.next.length);
+    var stage = checkpoint.verification.length ? 2 : hasProgress ? 1 : 0;
+    if (task.status !== "in_progress") stage = 3;
+    var blocked = task.status === "in_progress" && checkpoint.blockers.length > 0;
+    var stateName = task.status !== "in_progress" ? "complete" : blocked ? "blocked" : "working";
+    var labels = ["任务建立", "进展记录", "验证结果", "任务收尾"];
+    var positions = ["12.5%", "37.5%", "62.5%", "87.5%"];
+    var scene = element("div", "factory-scene " + stateName);
+    scene.style.setProperty("--station-position", positions[stage]);
+    scene.setAttribute("role", "img");
+    scene.setAttribute("aria-label", blocked
+      ? "任务流水线停在" + labels[stage] + "，等待解除阻塞"
+      : task.status === "in_progress"
+        ? "任务正在" + labels[stage] + "工位处理中"
+        : "任务流水线已完成");
+
+    var floor = element("div", "factory-floor");
+    floor.setAttribute("aria-hidden", "true");
+    var stations = element("div", "factory-stations");
+    labels.forEach(function (label, index) {
+      var stationClass = "factory-station";
+      if (task.status !== "in_progress" || index < stage) stationClass += " done";
+      else if (index === stage) stationClass += " current";
+      var station = element("div", stationClass);
+      station.append(element("span", "factory-machine"), element("span", "factory-station-label", label));
+      stations.append(station);
+    });
+    var worker = element("div", "factory-worker");
+    worker.append(
+      element("span", "factory-worker-head"),
+      element("span", "factory-worker-body"),
+      element("span", "factory-worker-arm"),
+      element("span", "factory-worker-arm right")
+    );
+    floor.append(
+      stations,
+      element("div", "factory-conveyor"),
+      element("div", "factory-unit", task.status === "in_progress" ? "TASK" : "DONE"),
+      worker
+    );
+
+    var verification = checkpoint.verification[checkpoint.verification.length - 1];
+    var orderContent = [
+      task.goal,
+      checkpoint.summary || checkpoint.completed[checkpoint.completed.length - 1] || "等待记录任务进展",
+      verification ? verification.command + " · " + verification.status : "等待验证结果",
+      task.status !== "in_progress"
+        ? checkpoint.completed[checkpoint.completed.length - 1] || checkpoint.summary || "任务已完成"
+        : checkpoint.next[0] ? "下一步：" + checkpoint.next[0] : "等待任务收尾"
+    ];
+    var orders = element("div", "factory-work-orders");
+    labels.forEach(function (label, index) {
+      var order = element("div", "factory-order" + (index === stage ? " current" : ""));
+      order.append(element("strong", "", "0" + (index + 1) + " · " + label), element("span", "", orderContent[index]));
+      orders.append(order);
+    });
+
+    var statusCopy = element("span", "factory-status-copy");
+    statusCopy.append(
+      element("span", "factory-status-dot"),
+      document.createTextNode(blocked ? "流水线等待解除阻塞" : task.status === "in_progress" ? "流水线正在生产" : "任务已完成出厂")
+    );
+    var status = element("div", "factory-status");
+    status.append(statusCopy, element("span", "factory-stage-name", labels[stage]));
+    scene.append(floor, orders, status);
+    return scene;
+  }
+
+  function taskMetric(value, label) {
+    var metric = element("div", "task-metric");
+    metric.append(element("strong", "", value), element("span", "", label));
+    return metric;
+  }
+
+  function taskDetailSection(title, items, emptyText, tone) {
+    var section = element("section", "task-detail-section");
+    section.append(element("h3", "", title));
+    var list = element("div", "task-activity-list");
+    if (!items.length) list.append(element("div", "task-activity", emptyText));
+    items.forEach(function (item) { list.append(element("div", "task-activity " + tone, item)); });
+    section.append(list);
+    return section;
+  }
+
+  function verificationSection(items) {
+    var section = element("section", "task-detail-section");
+    section.append(element("h3", "", "验证状态"));
+    var list = element("div", "task-activity-list");
+    if (!items.length) list.append(element("div", "task-activity", "尚未记录验证结果"));
+    items.forEach(function (item) {
+      var passing = /pass|success|complete|ok/i.test(item.status);
+      var entry = element("div", "task-activity " + (passing ? "success" : "warning"), item.command);
+      entry.append(element("small", "", item.status + (item.summary ? " · " + item.summary : "")));
+      list.append(entry);
+    });
+    section.append(list);
+    return section;
+  }
+
+  function taskIssuesSection(blockers, risks) {
+    var section = element("section", "task-detail-section");
+    section.append(element("h3", "", "阻塞与风险"));
+    var list = element("div", "task-activity-list");
+    if (!blockers.length && !risks.length) list.append(element("div", "task-activity success", "当前没有记录的阻塞或风险"));
+    blockers.forEach(function (item) { list.append(element("div", "task-activity danger", item)); });
+    risks.forEach(function (item) { list.append(element("div", "task-activity warning", item)); });
+    section.append(list);
+    return section;
+  }
+
+  async function updateTaskFromActivity(taskId, action, control) {
+    var projectId = els["task-project"].value;
+    control.disabled = true;
+    try {
+      await fetchJson("/api/projects/" + encodeURIComponent(projectId) + "/tasks/" + encodeURIComponent(taskId) + "/" + action, { method: "POST", body: {} });
+      state.selectedTaskId = taskId;
+      await loadTaskView(true, true);
+      state.portraitProjectId = null;
+      toast(action === "complete" ? "任务已完成" : "任务已取消");
+    } catch (error) {
+      toast(error.message || String(error), true);
+    } finally {
+      control.disabled = false;
+    }
   }
 
   async function loadIgnoreRules(projectId, silent) {
@@ -1435,9 +1999,10 @@ export const UI_JS = String.raw`(function () {
   function symbolKindLabel(kind) { return { class: "类", interface: "接口", method: "方法", function: "函数", type: "类型", enum: "枚举" }[kind] || kind || "符号"; }
 
   function switchView(view) {
-    ["portrait", "rules", "context"].forEach(function (name) { document.getElementById(name + "-view").hidden = name !== view; });
+    ["portrait", "task", "rules", "context"].forEach(function (name) { document.getElementById(name + "-view").hidden = name !== view; });
     document.querySelectorAll(".tab").forEach(function (button) { button.classList.toggle("active", button.dataset.view === view); });
     if (view === "portrait") loadPortrait(false);
+    if (view === "task") loadTaskView(false, false);
   }
 
   async function fetchJson(path, options) {
@@ -1464,6 +2029,15 @@ export const UI_JS = String.raw`(function () {
   function formatNumber(value) { return Number(value || 0).toLocaleString("zh-CN"); }
   function formatBytes(value) { var bytes = Number(value || 0); if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; }
   function formatDate(value) { if (!value) return "未知"; var date = new Date(value); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("zh-CN", { hour12: false }); }
+  function formatRelativeTime(value) {
+    var date = new Date(value); var seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (Number.isNaN(seconds)) return formatDate(value);
+    if (seconds < 10) return "刚刚";
+    if (seconds < 60) return seconds + " 秒前";
+    if (seconds < 3600) return Math.floor(seconds / 60) + " 分钟前";
+    if (seconds < 86400) return Math.floor(seconds / 3600) + " 小时前";
+    return Math.floor(seconds / 86400) + " 天前";
+  }
   function parseJsonArray(value) { try { var parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; } }
   function indexRunLabel(status) { return status === "completed" ? "索引正常" : status === "running" ? "正在索引" : "索引状态：" + status; }
   function statusLabel(status) { var labels = { active: "活跃", accepted: "已接受", pending: "待审核", in_progress: "进行中", completed: "已完成", cancelled: "已取消", stale: "已过期", conflicted: "有冲突", rejected: "已拒绝", superseded: "已替代", deleted: "已删除" }; return labels[status] || status; }

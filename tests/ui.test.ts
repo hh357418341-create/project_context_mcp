@@ -69,7 +69,28 @@ describe("localhost rule manager", () => {
     const page = await fetch(origin);
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
-    expect(await page.text()).toContain("Project Context");
+    const pageHtml = await page.text();
+    expect(pageHtml).toContain("Project Context");
+    expect(pageHtml).toContain("任务流水线");
+    expect(pageHtml).toContain("task-workspace");
+    expect(pageHtml).toContain('<section id="task-view" class="task-view">');
+    expect(pageHtml).toContain('<section id="portrait-view" class="portrait-view" hidden>');
+    expect(pageHtml).toContain("task-project-search");
+    const [styles, appScript] = await Promise.all([
+      fetch(`${origin}/styles.css`).then((response) => response.text()),
+      fetch(`${origin}/app.js`).then((response) => response.text()),
+    ]);
+    expect(styles).toContain(".factory-scene");
+    expect(styles).toContain(".task-toolbar { position: relative; z-index: 10;");
+    expect(styles).toContain(".task-project-results { position: absolute;");
+    expect(styles).toContain("max-height: min(262px, 42vh);");
+    expect(appScript).toContain('event.key === "Escape") { event.preventDefault(); closeTaskProjectResults();');
+    expect(appScript).toContain('els["task-project-search"].addEventListener("click"');
+    expect(styles).toContain(".factory-station-label");
+    expect(appScript).toContain("流水线正在生产");
+    expect(appScript).toContain('"factory-station-label"');
+    expect(appScript).toContain("factory-work-orders");
+    expect(appScript).toContain("等待验证结果");
 
     const unauthenticated = await api(origin, "/api/bootstrap");
     expect(unauthenticated.response.status).toBe(401);
@@ -97,6 +118,12 @@ describe("localhost rule manager", () => {
     });
     expect((portrait.body as { fileTypes: Array<{ extension: string; count: number }> }).fileTypes)
       .toEqual(expect.arrayContaining([expect.objectContaining({ extension: ".ts", count: 2 })]));
+    expect((portrait.body as { activeTasks: Array<{ id: string; checkpoint: { next: string[] } }> }).activeTasks)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: taskToComplete.id, checkpoint: expect.objectContaining({ next: [] }) }),
+      ]));
+    expect((portrait.body as { completedTasks: Array<{ id: string }> }).completedTasks)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: reviewTask.id })]));
 
     await writeFile(join(projectRoot, "src", "generated.ts"), "export const generated = true;\n", "utf8");
     const indexedGenerated = await api(origin, `/api/projects/${project.id}/index`, { method: "POST", cookie, body: {} });
