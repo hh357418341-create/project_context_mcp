@@ -734,6 +734,7 @@ export const UI_JS = String.raw`(function () {
   ];
   var types = [["constraint", "约束"], ["preference", "偏好"], ["decision", "决策"], ["fact", "事实"], ["lesson", "经验"], ["issue", "问题"], ["assumption", "假设"], ["task-summary", "任务总结"]];
   var els = {};
+  var TASK_PROJECT_STORAGE_KEY = "project-context-mcp:task-project-id";
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -793,6 +794,7 @@ export const UI_JS = String.raw`(function () {
     els["reactivate-rule"].addEventListener("click", function () { updateSelectedStatus("active"); });
     els["preview-context"].addEventListener("click", previewContext);
     els["task-project"].addEventListener("change", function () {
+      storeTaskProjectId(els["task-project"].value);
       state.taskProjectId = null; state.taskPortrait = null; state.selectedTaskId = null; state.taskSignature = null;
       syncTaskProjectSearch();
       loadTaskView(true, false);
@@ -886,13 +888,27 @@ export const UI_JS = String.raw`(function () {
   function renderProjectOptions() {
     [els["project-filter"], els["rule-project"], els["context-project"], els["portrait-project"], els["task-project"]].forEach(function (select, index) {
       var current = select.value;
+      if (select === els["task-project"] && !current) current = readTaskProjectId();
       select.replaceChildren();
       if (index === 0) addOption(select, "", "全部项目");
       else if (state.projects.length === 0) addOption(select, "", "没有已登记项目");
       state.projects.forEach(function (project) { addOption(select, project.id, project.name + (project.archivedAt ? "（已归档）" : "")); });
       if ([].some.call(select.options, function (option) { return option.value === current; })) select.value = current;
+      if (select === els["task-project"]) storeTaskProjectId(select.value);
     });
     syncTaskProjectSearch();
+  }
+
+  function readTaskProjectId() {
+    try { return window.localStorage.getItem(TASK_PROJECT_STORAGE_KEY) || ""; }
+    catch (_) { return ""; }
+  }
+
+  function storeTaskProjectId(projectId) {
+    try {
+      if (projectId) window.localStorage.setItem(TASK_PROJECT_STORAGE_KEY, projectId);
+      else window.localStorage.removeItem(TASK_PROJECT_STORAGE_KEY);
+    } catch (_) {}
   }
 
   function syncTaskProjectSearch() {

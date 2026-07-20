@@ -86,6 +86,10 @@ describe("localhost rule manager", () => {
     expect(styles).toContain("max-height: min(262px, 42vh);");
     expect(appScript).toContain('event.key === "Escape") { event.preventDefault(); closeTaskProjectResults();');
     expect(appScript).toContain('els["task-project-search"].addEventListener("click"');
+    expect(appScript).toContain('var TASK_PROJECT_STORAGE_KEY = "project-context-mcp:task-project-id";');
+    expect(appScript).toContain('current = readTaskProjectId()');
+    expect(appScript).toContain('storeTaskProjectId(els["task-project"].value)');
+    expect(appScript).toContain('if (select === els["task-project"]) storeTaskProjectId(select.value);');
     expect(styles).toContain(".factory-station-label");
     expect(appScript).toContain("流水线正在生产");
     expect(appScript).toContain('"factory-station-label"');
