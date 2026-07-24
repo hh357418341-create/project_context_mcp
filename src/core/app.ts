@@ -115,7 +115,13 @@ export class ProjectContextApp {
   }
 
   async relocateProject(projectId: string, newRoot: string): Promise<ProjectRecord> {
-    return this.projects.relocate(projectId, newRoot);
+    const activeWatch = projectWatches.list().find((watch) => watch.projectId === projectId);
+    const project = await this.projects.relocate(projectId, newRoot);
+    if (activeWatch) {
+      projectWatches.stop(projectId);
+      projectWatches.start(projectId, project.rootPath, activeWatch.debounceMs, false);
+    }
+    return project;
   }
 
   async deleteProject(projectId: string, options: {

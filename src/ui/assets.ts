@@ -29,6 +29,7 @@ export const UI_HTML = String.raw`<!doctype html>
         <div><span class="panel-label">PROJECT PORTRAIT</span><h1>项目画像</h1></div>
         <div class="portrait-actions">
           <div class="field"><label for="portrait-project">项目</label><select id="portrait-project"></select></div>
+          <button id="edit-project" class="secondary-button" type="button">编辑项目</button>
           <button id="index-project" class="secondary-button" type="button">立即索引</button>
           <button id="toggle-watch" class="secondary-button" type="button">启动监听</button>
           <button id="refresh-portrait" class="secondary-button" type="button">刷新画像</button>
@@ -222,6 +223,16 @@ export const UI_HTML = String.raw`<!doctype html>
 
   <dialog id="confirm-dialog">
     <form method="dialog"><h2>停用这条规则？</h2><p>规则会转为 deleted 状态并保留审计记录，不会物理删除。</p><div class="dialog-actions"><button value="cancel" class="secondary-button">取消</button><button value="confirm" class="danger-button">停用</button></div></form>
+  </dialog>
+  <dialog id="project-dialog">
+    <form id="project-form">
+      <h2>编辑项目</h2>
+      <div class="project-dialog-fields">
+        <div class="field"><label for="project-name">项目名称</label><input id="project-name" maxlength="160" required></div>
+        <div class="field"><label for="project-root">根目录</label><input id="project-root" maxlength="2000" required spellcheck="false"></div>
+      </div>
+      <div class="dialog-actions"><button id="cancel-project" class="secondary-button" type="button">取消</button><button id="save-project" class="primary-button" type="submit">保存</button></div>
+    </form>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
@@ -603,6 +614,9 @@ dialog form { padding: 22px; }
 dialog h2 { font-size: 17px; margin-bottom: 8px; }
 dialog p { color: var(--muted); line-height: 1.5; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.project-dialog-fields { display: grid; gap: 14px; margin-top: 18px; }
+#project-dialog { width: min(560px, calc(100vw - 32px)); }
+#project-root { font-family: Consolas, monospace; }
 .toast { position: fixed; right: 22px; bottom: 22px; max-width: min(420px, calc(100vw - 44px)); padding: 11px 14px; border-radius: 5px; background: #202824; color: #fff; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); pointer-events: none; transition: .18s ease; }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { background: var(--danger); }
@@ -677,7 +691,7 @@ dialog p { color: var(--muted); line-height: 1.5; }
   .task-detail-section, .task-detail-section:nth-child(2n) { min-height: 0; padding: 20px 16px; border-right: 0; }
   .task-detail-actions { padding-inline: 16px; }
   .portrait-toolbar { align-items: stretch; flex-direction: column; padding: 14px 16px; }
-  .portrait-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .portrait-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portrait-actions .field { grid-column: 1 / -1; min-width: 0; }
   .portrait-actions > button { width: 100%; padding-inline: 6px; }
   .portrait-identity { padding: 20px 16px; }
@@ -764,8 +778,9 @@ export const UI_JS = String.raw`(function () {
       "context-project", "context-task", "context-budget", "preview-context", "context-results",
       "context-summary", "empty-context",
       "task-project", "task-project-search", "task-project-results", "refresh-tasks", "task-loading", "task-empty", "task-workspace", "task-count", "task-list", "task-detail",
-      "portrait-project", "index-project", "toggle-watch", "refresh-portrait", "portrait-loading", "portrait-empty", "portrait-content",
+      "portrait-project", "edit-project", "index-project", "toggle-watch", "refresh-portrait", "portrait-loading", "portrait-empty", "portrait-content",
       "portrait-name", "portrait-state", "portrait-path", "portrait-index-state", "portrait-metrics",
+      "project-dialog", "project-form", "project-name", "project-root", "cancel-project", "save-project",
       "portrait-file-types", "portrait-git", "portrait-knowledge", "portrait-tasks", "portrait-memories", "portrait-stale-memories",
       "portrait-sources", "portrait-candidates", "portrait-overview", "portrait-graph",
       "ignore-form", "ignore-content", "ignore-status", "reload-ignore", "save-ignore", "ignore-path", "add-ignore-path",
@@ -816,6 +831,9 @@ export const UI_JS = String.raw`(function () {
     });
     els["refresh-tasks"].addEventListener("click", function () { loadTaskView(true, false); });
     els["portrait-project"].addEventListener("change", function () { resetGraph(); state.ignoreProjectId = null; loadPortrait(true); });
+    els["edit-project"].addEventListener("click", openProjectEditor);
+    els["project-form"].addEventListener("submit", saveProject);
+    els["cancel-project"].addEventListener("click", function () { els["project-dialog"].close(); });
     els["index-project"].addEventListener("click", indexSelectedProject);
     els["toggle-watch"].addEventListener("click", toggleSelectedWatch);
     els["refresh-portrait"].addEventListener("click", function () { loadPortrait(true); });
@@ -897,6 +915,42 @@ export const UI_JS = String.raw`(function () {
       if (select === els["task-project"]) storeTaskProjectId(select.value);
     });
     syncTaskProjectSearch();
+    els["edit-project"].disabled = !els["portrait-project"].value;
+  }
+
+  function openProjectEditor() {
+    var project = projectById(els["portrait-project"].value);
+    if (!project) return;
+    els["project-name"].value = project.name;
+    els["project-root"].value = project.rootPath;
+    els["project-dialog"].showModal();
+    els["project-name"].focus();
+    els["project-name"].select();
+  }
+
+  async function saveProject(event) {
+    event.preventDefault();
+    var projectId = els["portrait-project"].value;
+    if (!projectId) return;
+    els["save-project"].disabled = true;
+    try {
+      await fetchJson("/api/projects/" + encodeURIComponent(projectId), {
+        method: "PUT",
+        body: { name: els["project-name"].value, rootPath: els["project-root"].value }
+      });
+      await refresh();
+      state.portraitProjectId = null;
+      state.taskProjectId = null;
+      state.taskPortrait = null;
+      resetGraph();
+      els["project-dialog"].close();
+      await loadPortrait(true);
+      toast("项目名称和根目录已更新");
+    } catch (error) {
+      toast(error.message || String(error), true);
+    } finally {
+      els["save-project"].disabled = false;
+    }
   }
 
   function readTaskProjectId() {

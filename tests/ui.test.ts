@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ProjectContextApp } from "../src/core/app.js";
@@ -298,6 +298,49 @@ describe("localhost rule manager", () => {
       expect.objectContaining({ id: createdMemory.id, status: "superseded" }),
       expect.objectContaining({ id: newMemory.id, status: "deleted" }),
     ]));
+  });
+
+  it("updates a renamed project directory and rebinds its active watcher", async () => {
+    const app = await ProjectContextApp.create();
+    const project = await app.openProject(projectRoot);
+    await app.index(project.id);
+    app.close();
+
+    ui = await startUiServer({ openBrowser: false });
+    const origin = ui.url;
+    const launch = new URL(ui.launchUrl);
+    const token = new URLSearchParams(launch.hash.slice(1)).get("token");
+    const session = await api(origin, "/api/session", { method: "POST", body: { token } });
+    const cookie = session.response.headers.get("set-cookie")?.split(";")[0];
+
+    const watchStarted = await api(origin, `/api/projects/${project.id}/watch`, {
+      method: "POST", cookie, body: { debounceMs: 450 },
+    });
+    expect(watchStarted.body).toMatchObject({ rootPath: projectRoot, debounceMs: 450 });
+
+    const renamedRoot = join(tempRoot, "renamed-project");
+    await rename(projectRoot, renamedRoot);
+    const updated = await api(origin, `/api/projects/${project.id}`, {
+      method: "PUT", cookie, body: { name: "Renamed Project", rootPath: renamedRoot },
+    });
+    expect(updated.response.status).toBe(200);
+    expect(updated.body).toMatchObject({ id: project.id, name: "Renamed Project", rootPath: renamedRoot });
+
+    const bootstrap = await api(origin, "/api/bootstrap", { cookie });
+    expect(bootstrap.body).toMatchObject({
+      projects: [expect.objectContaining({ id: project.id, name: "Renamed Project", rootPath: renamedRoot })],
+    });
+    const portrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
+    expect(portrait.body).toMatchObject({
+      project: { id: project.id, name: "Renamed Project", rootPath: renamedRoot },
+      watch: { projectId: project.id, rootPath: renamedRoot, debounceMs: 450 },
+    });
+
+    const invalid = await api(origin, `/api/projects/${project.id}`, {
+      method: "PUT", cookie, body: { name: "", rootPath: renamedRoot },
+    });
+    expect(invalid.response.status).toBe(400);
+    await api(origin, `/api/projects/${project.id}/watch`, { method: "DELETE", cookie });
   });
 
   it("rejects cross-origin API requests and oversized bodies", async () => {

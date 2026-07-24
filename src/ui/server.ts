@@ -36,6 +36,10 @@ const graphNodeIdSchema = z.string().trim().min(1).max(800);
 const projectIgnoreInputSchema = z.object({
   content: z.string().max(60_000).refine((value) => !value.includes("\0"), "Ignore rules cannot contain NUL bytes."),
 }).strict();
+const projectUpdateInputSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  rootPath: z.string().trim().min(1).max(2_000).refine((value) => !value.includes("\0"), "Project root cannot contain NUL bytes."),
+}).strict();
 
 export interface UiServerHandle {
   url: string;
@@ -126,6 +130,17 @@ async function routeRequest(
         projects: app.projects.list(true),
         memories: app.allUserMemories(),
       }));
+      return;
+    }
+    const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+    if (request.method === "PUT" && projectMatch) {
+      const projectId = decodeSegment(projectMatch[1]!);
+      const input = projectUpdateInputSchema.parse(await readJsonBody(request));
+      await withApp(response, async (app) => {
+        const current = app.projects.get(projectId);
+        if (current.rootPath !== input.rootPath) await app.relocateProject(projectId, input.rootPath);
+        return app.updateProject(projectId, input.name);
+      });
       return;
     }
     const portraitMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/portrait$/);
