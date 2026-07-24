@@ -300,7 +300,7 @@ describe("localhost rule manager", () => {
     ]));
   });
 
-  it("updates a renamed project directory and rebinds its active watcher", async () => {
+  it("automatically finds a renamed project directory and rebinds its active watcher", async () => {
     const app = await ProjectContextApp.create();
     const project = await app.openProject(projectRoot);
     await app.index(project.id);
@@ -320,21 +320,21 @@ describe("localhost rule manager", () => {
 
     const renamedRoot = join(tempRoot, "renamed-project");
     await rename(projectRoot, renamedRoot);
+    const bootstrap = await api(origin, "/api/bootstrap", { cookie });
+    expect(bootstrap.body).toMatchObject({
+      projects: [expect.objectContaining({ id: project.id, name: "renamed-project", rootPath: renamedRoot })],
+    });
+    const portrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
+    expect(portrait.body).toMatchObject({
+      project: { id: project.id, name: "renamed-project", rootPath: renamedRoot },
+      watch: { projectId: project.id, rootPath: renamedRoot, debounceMs: 450 },
+    });
+
     const updated = await api(origin, `/api/projects/${project.id}`, {
       method: "PUT", cookie, body: { name: "Renamed Project", rootPath: renamedRoot },
     });
     expect(updated.response.status).toBe(200);
     expect(updated.body).toMatchObject({ id: project.id, name: "Renamed Project", rootPath: renamedRoot });
-
-    const bootstrap = await api(origin, "/api/bootstrap", { cookie });
-    expect(bootstrap.body).toMatchObject({
-      projects: [expect.objectContaining({ id: project.id, name: "Renamed Project", rootPath: renamedRoot })],
-    });
-    const portrait = await api(origin, `/api/projects/${project.id}/portrait`, { cookie });
-    expect(portrait.body).toMatchObject({
-      project: { id: project.id, name: "Renamed Project", rootPath: renamedRoot },
-      watch: { projectId: project.id, rootPath: renamedRoot, debounceMs: 450 },
-    });
 
     const invalid = await api(origin, `/api/projects/${project.id}`, {
       method: "PUT", cookie, body: { name: "", rootPath: renamedRoot },

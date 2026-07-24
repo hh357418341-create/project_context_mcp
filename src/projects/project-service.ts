@@ -1,5 +1,5 @@
 import { basename, dirname, join, normalize, resolve } from "node:path";
-import { access, copyFile, mkdir, realpath, rename, rm, rmdir, stat } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, realpath, rename, rm, rmdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
 import type { SqliteDatabase } from "../storage/database.js";
@@ -12,6 +12,10 @@ import { detectVersionControlRemote } from "../vcs/vcs-service.js";
 
 const PROJECT_STORAGE_LAYOUT = "project-root";
 const PROJECT_DATA_DIRECTORY = ".project-context";
+const PROJECT_ID_METADATA_KEY = "project_id";
+const DISCOVERY_IGNORED_DIRECTORIES = new Set([
+  ".git", ".hg", ".svn", "node_modules", "dist", "build", "coverage",
+]);
 
 export interface ProjectRecord {
   id: string;
@@ -65,6 +69,7 @@ export class ProjectService {
       .get(normalized) as ProjectRow | undefined;
     if (existing) {
       await this.migrateLegacyDatabase(existing);
+      this.ensureProjectIdentity(existing.id, normalized);
       this.registry.prepare("UPDATE projects SET last_opened_at = ?, updated_at = ? WHERE id = ?")
         .run(timestamp, timestamp, existing.id);
       return { ...mapProject(existing), updatedAt: timestamp, lastOpenedAt: timestamp };
@@ -118,7 +123,9 @@ export class ProjectService {
           id, name, root_path, remote_url, created_at, updated_at, last_opened_at, storage_layout
         ) VALUES (@id, @name, @rootPath, @remoteUrl, @createdAt, @updatedAt, @lastOpenedAt, '${PROJECT_STORAGE_LAYOUT}')
       `).run(project);
+      this.ensureProjectIdentity(project.id, project.rootPath, true);
     } catch (error) {
+      this.registry.prepare("DELETE FROM projects WHERE id = ?").run(project.id);
       if (!targetExisted) {
         await removeDatabaseFile(target);
         await removeEmptyDirectory(dirname(target));
@@ -136,7 +143,38 @@ export class ProjectService {
       const migration = await this.migrateLegacyDatabase(row);
       if (migration) migrations.push(migration);
     }
+    this.backfillProjectIdentities();
     return migrations;
+  }
+
+  async reconcileMovedProjects(): Promise<ProjectRecord[]> {
+    this.backfillProjectIdentities();
+    const missing = this.registry.prepare("SELECT * FROM projects WHERE storage_layout = ?")
+      .all(PROJECT_STORAGE_LAYOUT) as ProjectRow[];
+    const missingRows: ProjectRow[] = [];
+    for (const row of missing) {
+      if (!(await pathExists(row.root_path))) missingRows.push(row);
+    }
+    if (missingRows.length === 0 || this.allowedProjectRoots.length === 0) return [];
+
+    const candidates = await discoverProjectDatabases(this.allowedProjectRoots);
+    const relocated: ProjectRecord[] = [];
+    for (const row of missingRows) {
+      const matches = candidates.filter((candidate) => candidate.projectId === row.id);
+      if (matches.length !== 1) continue;
+      const candidate = matches[0]!;
+      const conflict = this.registry.prepare("SELECT id FROM projects WHERE root_path = ? AND id <> ?")
+        .get(candidate.rootPath, row.id) as { id: string } | undefined;
+      if (conflict) continue;
+
+      await this.relocate(row.id, candidate.rootPath);
+      if (row.name === basename(row.root_path)) {
+        this.registry.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?")
+          .run(basename(candidate.rootPath), nowIso(), row.id);
+      }
+      relocated.push(this.get(row.id));
+    }
+    return relocated;
   }
 
   get(projectId: string): ProjectRecord {
@@ -193,6 +231,7 @@ export class ProjectService {
       throw new ProjectContextError("PROJECT_ROOT_ALREADY_REGISTERED", `Project root is already registered: ${newRoot}`);
     }
     const previousDatabase = await this.moveDatabaseToRoot(currentRow, newRoot);
+    this.ensureProjectIdentity(projectId, newRoot);
     const remoteUrl = await detectVersionControlRemote(newRoot);
     const timestamp = nowIso();
     this.registry.prepare(`
@@ -486,11 +525,48 @@ export class ProjectService {
           '${PROJECT_STORAGE_LAYOUT}'
         )
       `).run(project);
+      this.ensureProjectIdentity(project.id, project.rootPath, true);
       return { project, restored: true, replacedExisting: false };
     } catch (error) {
+      this.registry.prepare("DELETE FROM projects WHERE id = ?").run(project.id);
       await removeDatabaseFile(target);
       await removeEmptyDirectory(directory);
       throw error;
+    }
+  }
+
+  private backfillProjectIdentities(): void {
+    const rows = this.registry.prepare("SELECT * FROM projects WHERE storage_layout = ?")
+      .all(PROJECT_STORAGE_LAYOUT) as ProjectRow[];
+    for (const row of rows) {
+      if (!existsSync(this.projectDatabasePathForRoot(row.root_path))) continue;
+      this.ensureProjectIdentity(row.id, row.root_path);
+    }
+  }
+
+  private ensureProjectIdentity(projectId: string, rootPath: string, overwrite = false): void {
+    const databasePath = this.projectDatabasePathForRoot(rootPath);
+    const db = openDatabase(databasePath);
+    try {
+      migrateProject(db);
+      validateOpenDatabase(db);
+      if (overwrite) {
+        db.prepare("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)")
+          .run(PROJECT_ID_METADATA_KEY, projectId);
+      } else {
+        db.prepare("INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)")
+          .run(PROJECT_ID_METADATA_KEY, projectId);
+        const identity = db.prepare("SELECT value FROM metadata WHERE key = ?")
+          .get(PROJECT_ID_METADATA_KEY) as { value: string } | undefined;
+        if (identity?.value !== projectId) {
+          throw new ProjectContextError(
+            "PROJECT_DATABASE_IDENTITY_MISMATCH",
+            "Project database identity does not match its registry entry.",
+          );
+        }
+      }
+    } finally {
+      db.close();
     }
   }
 }
@@ -510,6 +586,71 @@ function mapProject(row: ProjectRow): ProjectRecord {
 
 async function pathExists(path: string): Promise<boolean> {
   return stat(path).then(() => true).catch(() => false);
+}
+
+async function discoverProjectDatabases(allowedRoots: string[]): Promise<Array<{ projectId: string; rootPath: string }>> {
+  const candidates: Array<{ projectId: string; rootPath: string }> = [];
+  const visited = new Set<string>();
+  for (const configuredRoot of allowedRoots) {
+    const allowedRoot = await realpath(resolve(configuredRoot)).catch(() => null);
+    if (!allowedRoot || visited.has(normalize(allowedRoot))) continue;
+    await scanDirectory(allowedRoot, allowedRoots, candidates, visited);
+  }
+  return candidates;
+}
+
+async function scanDirectory(
+  directory: string,
+  allowedRoots: string[],
+  candidates: Array<{ projectId: string; rootPath: string }>,
+  visited: Set<string>,
+): Promise<void> {
+  const normalizedDirectory = normalize(directory);
+  if (visited.has(normalizedDirectory)) return;
+  visited.add(normalizedDirectory);
+
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  const contextDirectory = entries.find((entry) => entry.isDirectory() && entry.name === PROJECT_DATA_DIRECTORY);
+  if (contextDirectory) {
+    const databasePath = join(directory, PROJECT_DATA_DIRECTORY, "project.db");
+    if (await pathExists(databasePath)) {
+      const authorizedRoot = await authorizeExistingPath(
+        directory,
+        allowedRoots,
+        "PROJECT_ROOT_NOT_AUTHORIZED",
+        "Project root",
+      ).catch(() => null);
+      const projectId = authorizedRoot ? readProjectIdentity(databasePath) : null;
+      if (authorizedRoot && projectId) candidates.push({ projectId, rootPath: authorizedRoot });
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === PROJECT_DATA_DIRECTORY || DISCOVERY_IGNORED_DIRECTORIES.has(entry.name)) continue;
+    await scanDirectory(join(directory, entry.name), allowedRoots, candidates, visited);
+  }
+}
+
+function readProjectIdentity(databasePath: string): string | null {
+  try {
+    validateProjectDatabaseFile(databasePath);
+    const db = new Database(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      const row = db.prepare("SELECT value FROM metadata WHERE key = ?")
+        .get(PROJECT_ID_METADATA_KEY) as { value: string } | undefined;
+      return row?.value ?? null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 function validateBackupSource(path: string): void {

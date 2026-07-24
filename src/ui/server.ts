@@ -126,10 +126,13 @@ async function routeRequest(
     }
 
     if (request.method === "GET" && url.pathname === "/api/bootstrap") {
-      await withApp(response, (app) => ({
-        projects: app.projects.list(true),
-        memories: app.allUserMemories(),
-      }));
+      await withApp(response, async (app) => {
+        await app.reconcileMovedProjects();
+        return {
+          projects: app.projects.list(true),
+          memories: app.allUserMemories(),
+        };
+      });
       return;
     }
     const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);

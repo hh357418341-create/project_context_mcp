@@ -50,6 +50,86 @@ describe("personal storage lifecycle", () => {
       const project = await app.openProject(projectRoot);
       await expect(access(join(projectRoot, ".project-context", "project.db"))).resolves.toBeUndefined();
       await expect(access(join(storageRoot, "projects", project.id, "project.db"))).rejects.toMatchObject({ code: "ENOENT" });
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(join(projectRoot, ".project-context", "project.db"), { readonly: true });
+      expect(db.prepare("SELECT value FROM metadata WHERE key = 'project_id'").pluck().get()).toBe(project.id);
+      db.close();
+    } finally {
+      app.close();
+    }
+  });
+
+  it("automatically recovers a moved project while preserving a custom name", async () => {
+    const app = await ProjectContextApp.create();
+    try {
+      const project = await app.openProject(projectRoot);
+      app.updateProject(project.id, "Custom Project Name");
+      const movedRoot = join(tempRoot, "moved-project");
+      await rename(projectRoot, movedRoot);
+
+      await expect(app.reconcileMovedProjects()).resolves.toEqual([
+        expect.objectContaining({ id: project.id, rootPath: movedRoot, name: "Custom Project Name" }),
+      ]);
+      expect(app.projects.get(project.id)).toMatchObject({ rootPath: movedRoot, name: "Custom Project Name" });
+    } finally {
+      app.close();
+    }
+  });
+
+  it("backfills stable identities for databases created before automatic recovery", async () => {
+    const firstApp = await ProjectContextApp.create();
+    const project = await firstApp.openProject(projectRoot);
+    firstApp.close();
+
+    const Database = (await import("better-sqlite3")).default;
+    const databasePath = join(projectRoot, ".project-context", "project.db");
+    const legacyDb = new Database(databasePath);
+    legacyDb.prepare("DELETE FROM metadata WHERE key = 'project_id'").run();
+    legacyDb.close();
+
+    const reopenedApp = await ProjectContextApp.create();
+    try {
+      const reopenedDb = new Database(databasePath, { readonly: true });
+      expect(reopenedDb.prepare("SELECT value FROM metadata WHERE key = 'project_id'").pluck().get()).toBe(project.id);
+      reopenedDb.close();
+    } finally {
+      reopenedApp.close();
+    }
+  });
+
+  it("does not guess when multiple databases claim the same project identity", async () => {
+    const app = await ProjectContextApp.create();
+    try {
+      const project = await app.openProject(projectRoot);
+      const firstCandidate = join(tempRoot, "candidate-one");
+      const secondCandidate = join(tempRoot, "candidate-two");
+      await rename(projectRoot, firstCandidate);
+      await mkdir(join(secondCandidate, ".project-context"), { recursive: true });
+      await copyFile(
+        join(firstCandidate, ".project-context", "project.db"),
+        join(secondCandidate, ".project-context", "project.db"),
+      );
+
+      await expect(app.reconcileMovedProjects()).resolves.toEqual([]);
+      expect(app.projects.get(project.id).rootPath).toBe(projectRoot);
+    } finally {
+      app.close();
+    }
+  });
+
+  it("ignores a moved database whose stable identity does not match", async () => {
+    const app = await ProjectContextApp.create();
+    try {
+      const project = await app.openProject(projectRoot);
+      const movedRoot = join(tempRoot, "wrong-identity");
+      await rename(projectRoot, movedRoot);
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(join(movedRoot, ".project-context", "project.db"));
+      db.prepare("UPDATE metadata SET value = ? WHERE key = 'project_id'").run("prj_not_the_registered_project");
+      db.close();
+
+      await expect(app.reconcileMovedProjects()).resolves.toEqual([]);
+      expect(app.projects.get(project.id).rootPath).toBe(projectRoot);
     } finally {
       app.close();
     }

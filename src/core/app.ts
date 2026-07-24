@@ -124,6 +124,18 @@ export class ProjectContextApp {
     return project;
   }
 
+  async reconcileMovedProjects(): Promise<ProjectRecord[]> {
+    const activeWatches = new Map(projectWatches.list().map((watch) => [watch.projectId, watch]));
+    const relocated = await this.projects.reconcileMovedProjects();
+    for (const project of relocated) {
+      const activeWatch = activeWatches.get(project.id);
+      if (!activeWatch) continue;
+      projectWatches.stop(project.id);
+      projectWatches.start(project.id, project.rootPath, activeWatch.debounceMs, false);
+    }
+    return relocated;
+  }
+
   async deleteProject(projectId: string, options: {
     confirmProjectId: string;
     purge?: boolean;
